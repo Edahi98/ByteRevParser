@@ -167,15 +167,17 @@ huggingface-cli download jinaai/jina-reranker-v2-base-multilingual --local-dir m
 
 ## 🧩 Modelo de extracción estructurada (NuExtract)
 
-`services/nuextract_service.py` usa **NuExtract-1.5-tiny** (fine-tune de NuMind sobre Qwen2.5-0.5B), en formato **GGUF cuantizado** (`Q8_0`). No está versionado en este repo — hay que colocar el archivo en `models_ai/NuExtract-1.5-tiny.Q8_0.gguf` (el nombre debe coincidir exactamente con `GGUF_FILE` en `services/nuextract_service.py`).
+`services/nuextract_service.py` usa **NuExtract-1.5-tiny** (fine-tune de NuMind sobre Qwen2.5-0.5B), en formato **GGUF cuantizado** (`Q8_0`), cargado con **`llama_cpp.Llama`** (no `transformers`). No está versionado en este repo — hay que colocar el archivo en `models_ai/NuExtract-1.5-tiny.Q8_0.gguf` (el nombre debe coincidir exactamente con `GGUF_PATH` en `services/nuextract_service.py`).
 
-> A diferencia de `jina-reranker`, este modelo usa una arquitectura estándar (`Qwen2ForCausalLM`) — no requiere `trust_remote_code=True` ni depende del pin especial de `transformers`. Cargar un `.gguf` con `transformers` requiere el paquete `gguf` (ya en `pyproject.toml`).
+> ⚠️ El vocabulario de este `.gguf` corrompe tildes y `ñ` al tokenizar (se reproduce igual con `transformers` y con `llama_cpp`, es un defecto del archivo). `TextNormalizerService.strip_accents` limpia la entrada y la salida del modelo para evitarlo — el resultado pierde el diacrítico original (`Núñez` → `Nunez`).
 
 ---
 
 ## 🗣️ Modelo de redacción (Qwen)
 
-`services/redactor_service.py` usa **Qwen2.5-0.5B-Instruct**, también en formato **GGUF cuantizado** (`q5_0`). No está versionado en este repo — hay que colocar el archivo en `models_ai/qwen2.5-0.5b-instruct-q5_0.gguf` (el nombre debe coincidir exactamente con `GGUF_FILE` en `services/redactor_service.py`).
+`services/redactor_service.py` usa **Qwen2.5-0.5B-Instruct**, también en formato **GGUF cuantizado** (`q8_0`), cargado con **`llama_cpp.Llama`**. No está versionado en este repo — hay que colocar el archivo en `models_ai/qwen2.5-0.5b-instruct-q8_0.gguf` (el nombre debe coincidir exactamente con `GGUF_PATH` en `services/redactor_service.py`).
+
+> ⚠️ Mismo defecto de vocabulario que `NuExtract-1.5-tiny.Q8_0.gguf` — ver nota arriba.
 
 ---
 
