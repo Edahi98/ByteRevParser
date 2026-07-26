@@ -1,13 +1,16 @@
 import gc
 import os
 
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from llama_cpp import Llama
+
+from services.text_normalizer_service import TextNormalizerService
 
 MODELS_AI_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models_ai")
-GGUF_FILE = "qwen2.5-0.5b-instruct-q5_0.gguf"
+GGUF_PATH = os.path.join(MODELS_AI_DIR, "qwen2.5-0.5b-instruct-q8_0.gguf")
 
-SYSTEM_PROMPT = (
+_strip_accents = TextNormalizerService.strip_accents
+
+SYSTEM_PROMPT = _strip_accents(
     "Redactas en prosa fluida y natural el contenido de una tabla en Markdown, usando "
     "exactamente los valores de cada fila (texto, número, fecha o cualquier otro tipo de dato), "
     "sin inventar ni omitir ningún valor, columna ni dato adicional. Una fila puede tener "
@@ -31,21 +34,27 @@ EXAMPLE_TABLE_WITH_HEADER = (
 )
 EXAMPLE_PROSE_WITH_HEADER = "Manzana tiene un precio de 10.\nPan tiene un precio de 5."
 
-EXAMPLE_TABLE_NO_HEADER = (
+EXAMPLE_TABLE_NO_HEADER = _strip_accents(
     "| Columna 1 | Columna 2 |\n| --- | --- |\n| ALMA CHONTAL | F |\n| RICARDO AVILA | M |"
 )
-EXAMPLE_PROSE_NO_HEADER = "ALMA CHONTAL tiene asociado el valor F.\nRICARDO AVILA tiene asociado el valor M."
+EXAMPLE_PROSE_NO_HEADER = _strip_accents(
+    "ALMA CHONTAL tiene asociado el valor F.\nRICARDO AVILA tiene asociado el valor M."
+)
 
-EXAMPLE_TABLE_NO_HEADER_MULTI = (
+EXAMPLE_TABLE_NO_HEADER_MULTI = _strip_accents(
     "| Columna 1 | Columna 2 | Columna 3 |\n| --- | --- | --- |\n"
     "| 2024-01-05 | Compra | 1500 |\n| 2024-02-10 | Venta | 800 |"
 )
-EXAMPLE_PROSE_NO_HEADER_MULTI = (
+EXAMPLE_PROSE_NO_HEADER_MULTI = _strip_accents(
     "El 2024-01-05 se registró Compra con un valor de 1500.\nEl 2024-02-10 se registró Venta con un valor de 800."
 )
 
-EXAMPLE_PARAGRAPH = "Este documento fue generado el 12 de marzo de 2024 por el departamento de finanzas."
-EXAMPLE_PARAGRAPH_PROSE = "Este documento fue generado el 12 de marzo de 2024 por el departamento de finanzas."
+EXAMPLE_PARAGRAPH = _strip_accents(
+    "Este documento fue generado el 12 de marzo de 2024 por el departamento de finanzas."
+)
+EXAMPLE_PARAGRAPH_PROSE = _strip_accents(
+    "Este documento fue generado el 12 de marzo de 2024 por el departamento de finanzas."
+)
 
 
 class RedactorService:
@@ -54,7 +63,14 @@ class RedactorService:
 
     Singleton de una sola instancia por proceso, pero el modelo
     (qwen2.5-0.5b-instruct-q5_0.gguf) ya no se mantiene cargado entre llamadas:
-    `redact()` lo carga bajo demanda y lo libera de memoria justo después de usarlo.
+    `redact()` lo carga bajo demanda vía llama.cpp (`llama_cpp.Llama`) y lo libera
+    de memoria justo después de usarlo.
+
+    El vocabulario de este .gguf corrompe tildes y la `ñ` al tokenizar (se
+    reproduce igual con `transformers` y con llama.cpp nativo, así que es un
+    problema del propio archivo, no del loader). Mientras se use este .gguf,
+    `TextNormalizerService.strip_accents` limpia la entrada y la salida del
+    modelo para evitar esa corrupción, a costa de perder el diacrítico original.
     """
 
     _instance: "RedactorService | None" = None
@@ -68,23 +84,15 @@ class RedactorService:
         if getattr(self, "_initialized", False):
             return
 
-        self.tokenizer = None
-        self.model = None
+        self.llm: Llama | None = None
         self._initialized = True
 
     def _load(self) -> None:
-        self.tokenizer = AutoTokenizer.from_pretrained(MODELS_AI_DIR, gguf_file=GGUF_FILE)
-        self.model = AutoModelForCausalLM.from_pretrained(
-            MODELS_AI_DIR, gguf_file=GGUF_FILE, dtype=torch.bfloat16
-        )
-        self.model.eval()
+        self.llm = Llama(model_path=GGUF_PATH, n_ctx=4096, verbose=False)
 
     def _unload(self) -> None:
-        self.tokenizer = None
-        self.model = None
+        self.llm = None
         gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
 
     def redact(self, markdown: str) -> str:
         self._load()
@@ -99,17 +107,11 @@ class RedactorService:
                 {"role": "assistant", "content": EXAMPLE_PROSE_NO_HEADER_MULTI},
                 {"role": "user", "content": EXAMPLE_PARAGRAPH},
                 {"role": "assistant", "content": EXAMPLE_PARAGRAPH_PROSE},
-                {"role": "user", "content": markdown},
+                {"role": "user", "content": TextNormalizerService.strip_accents(markdown)},
             ]
-            prompt = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-
-            input_ids = self.tokenizer(prompt, return_tensors="pt")
-            output_ids = self.model.generate(**input_ids, max_new_tokens=1024, do_sample=False)
-
-            output = self.tokenizer.decode(
-                output_ids[0][input_ids["input_ids"].shape[1] :], skip_special_tokens=True
-            )
+            response = self.llm.create_chat_completion(messages=messages, max_tokens=1024, temperature=0)
+            output = response["choices"][0]["message"]["content"]
         finally:
             self._unload()
 
-        return output.strip()
+        return TextNormalizerService.strip_accents(output.strip())
