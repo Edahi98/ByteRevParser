@@ -3,14 +3,17 @@ import { TextArea } from '../atoms/TextArea'
 
 export function PipelineJsonField({ value, onChange, onLoadFile, accent = 'blue' }) {
   return (
-    <div>
+    <div className="flex flex-col gap-1">
       <div className="flex items-center justify-between mb-0.5">
         <Label htmlFor="pipeline-json">JSON del pipeline</Label>
-        <label htmlFor="pipeline-json-file" className="text-xs font-medium text-blue-700 hover:text-blue-800 cursor-pointer flex items-center gap-1">
-          📁 Cargar desde archivo
+        <label
+          htmlFor="pipeline-json-file"
+          className="text-xs font-semibold text-blue-600 hover:text-blue-800 cursor-pointer inline-flex items-center gap-1 hover:underline transition-all"
+        >
+          <span>📁</span> Cargar desde archivo
         </label>
       </div>
-      <p className="mb-2 text-xs text-slate-500">
+      <p className="text-xs text-slate-500 mb-1">
         Configuración técnica del proceso (no la edites si no sabes qué hace)
       </p>
       <input
@@ -24,4 +27,5 @@ export function PipelineJsonField({ value, onChange, onLoadFile, accent = 'blue'
     </div>
   )
 }
+
 
