@@ -1,16 +1,15 @@
-import bgWarm from '../../assets/bg-warm.svg'
-
 export function MainTemplate({ header, children }) {
   return (
-    <div
-      className="min-h-screen bg-cover bg-center bg-no-repeat bg-fixed flex flex-col items-center px-4 relative"
-      style={{
-        backgroundImage: `linear-gradient(to bottom right, rgba(254, 243, 199, 0.3), rgba(255, 237, 213, 0.3)), url("${bgWarm}")`,
-      }}
-    >
+    <div className="min-h-screen bg-white text-slate-800 flex flex-col font-sans antialiased">
       {header}
-      <main className="w-full flex flex-col items-center gap-4 py-6 z-10">{children}</main>
+      <main className="flex-1 w-full flex flex-col">
+        {children}
+      </main>
+      <footer className="w-full py-6 text-center text-xs text-slate-500 border-t border-slate-200/60 bg-white">
+        RedDragon &copy; {new Date().getFullYear()} OLAN Manufacturing Systems
+      </footer>
     </div>
   )
 }
+
 

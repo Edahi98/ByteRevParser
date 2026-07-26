@@ -37,10 +37,7 @@ export function PipelineForm({ onSubmit, isLoading }) {
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="w-full max-w-xl flex flex-col gap-5 bg-white/80 backdrop-blur rounded-2xl border border-orange-200 shadow-xl shadow-orange-500/10 p-6"
-    >
+    <form onSubmit={handleSubmit} className="w-full flex flex-col">
       <FormSection
         title="Tu documento y pipeline"
         icon="📄"
@@ -59,46 +56,62 @@ export function PipelineForm({ onSubmit, isLoading }) {
       <FormSection
         title="Salida"
         icon="⚙️"
-        accent="purple"
+        accent="indigo"
         subtitle="Configura la forma y estructura en que deseas recibir la información procesada"
       >
         <ModeField
-          accent="purple"
+          accent="indigo"
           value={mode}
           onChange={(event) => setMode(event.target.value)}
+          options={pipelineModes}
           disabled={useSchema}
         />
         <SchemaToggleField
-          accent="purple"
+          accent="indigo"
           checked={useSchema}
           onChange={(event) => setUseSchema(event.target.checked)}
         />
         {useSchema && (
-          <SchemaField accent="purple" value={schema} onChange={(event) => setSchema(event.target.value)} />
+          <SchemaField accent="indigo" value={schema} onChange={(event) => setSchema(event.target.value)} />
         )}
       </FormSection>
 
       <FormSection
         title="Buscar lo más relevante (opcional)"
         icon="🔍"
-        accent="teal"
+        accent="cyan"
         subtitle="Filtra y ordena la información por relevancia según tus palabras clave"
       >
-        <QueryField accent="teal" value={query} onChange={(event) => setQuery(event.target.value)} />
+        <QueryField accent="cyan" value={query} onChange={(event) => setQuery(event.target.value)} />
         <TopKField
-          accent="teal"
+          accent="cyan"
           value={topK}
           onChange={(event) => setTopK(event.target.value)}
           disabled={!query}
         />
       </FormSection>
 
-      <div className="pt-2">
-        <Button type="submit" disabled={!file || isLoading}>
-          {isLoading ? 'Ejecutando...' : 'Ejecutar pipeline'}
-        </Button>
-      </div>
+      <section className="w-full py-10 bg-slate-100/80 border-t border-slate-200/70">
+        <div className="max-w-4xl mx-auto px-4 md:px-6 flex justify-start">
+          <div className="w-full md:w-auto md:min-w-[240px]">
+            <Button type="submit" disabled={!file || isLoading}>
+              {isLoading ? (
+                <span className="inline-flex items-center justify-center gap-2">
+                  <svg className="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Procesando documento...
+                </span>
+              ) : (
+                'Ejecutar pipeline'
+              )}
+            </Button>
+          </div>
+        </div>
+      </section>
     </form>
   )
 }
+
 
