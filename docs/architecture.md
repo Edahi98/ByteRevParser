@@ -68,11 +68,11 @@ service → binarios externos (resources/*) o librerías (bs4, pdf2docx, request
 | Servicio | Responsabilidad |
 |---|---|
 | `pdf_service.py` | `PdfService.convert_to_docx(pdf_path)` — convierte PDF a DOCX vía `pdf2docx`. |
-| `xmljava_service.py` | `XmlJavaService.convert(input_path)` — ejecuta el binario `resources/xmljava-docker` (subprocess) para convertir un archivo a XML. |
+| `xmljava_service.py` | `XmlJavaService.convert(input_path)` — ejecuta el binario `xmljava` (subprocess) para convertir un archivo a XML; la ruta y el nombre exacto del binario los resuelve `BinaryAdapterFactory` (ver [`services/adapters/`](#servicesadapters--adapter-de-binarios-por-plataforma)). |
 | `xml_service.py` | Operaciones sobre árboles XML con BeautifulSoup: `extract_tables` (aplana `Paragraph`/`Table→Row→Col`), `prune_xml` (elimina nodos hoja cuyo texto no está en `valid_data`, limpia nodos vacíos, escribe un XML podado), `extract_text` (recorre `Paragraph`/`Table` y devuelve un string por bloque, filtrado por `valid_data`). |
 | `markdown_service.py` | `MarkdownService.to_markdown(xml_path)` — renderiza como Markdown un XML **ya podado** (la salida de `XmlService.prune_xml`): `Paragraph` → línea de texto, `Table` → tabla `\| Columna N \|`. No filtra ni valida nada; asume que el XML recibido ya contiene solo lo relevante. Como `prune_xml` poda por celda y no por fila, las filas de una misma tabla pueden llegar con distinto número de `Col`: se normalizan al ancho de la fila más larga **rellenando por la derecha** con celdas vacías (ver [criterio de alineación](#alineación-de-columnas-tras-el-podado)). |
 | `pipeline_service.py` | `PipelineService.replace_data(pipeline, extracted_data)` — recorre recursivamente un JSON (dicts/listas anidadas) y reemplaza cada llave `"data"` por `{"dato": extracted_data}` — Tsubasa espera que `data` en un nodo `scan` sea un dict columnar (`{columna: [valores]}`), no una lista plana. |
-| `tsubasa_service.py` | `TsubasaService` — **singleton** que gestiona el ciclo de vida del binario `resources/tsubasa` (`start`/`stop`, subprocess) y llama a su endpoint HTTP `/execute` (vía `requests`), aplanando la respuesta (`outputs`/`series`/`dataframe`) a una lista de valores puros. |
+| `tsubasa_service.py` | `TsubasaService` — **singleton** que gestiona el ciclo de vida del binario `tsubasa` (`start`/`stop`, subprocess, resuelto vía `BinaryAdapterFactory`) y llama a su endpoint HTTP `/execute` (vía `requests`), aplanando la respuesta (`outputs`/`series`/`dataframe`) a una lista de valores puros. |
 | `cross_encoder_service.py` | `CrossEncoderService` — **singleton** que carga (una sola vez) el modelo `jina-reranker-v2-base-multilingual` (`models_ai/`, no versionado) vía `sentence_transformers.CrossEncoder`. `rerank(query, candidates, top_k=None)` reordena `candidates` por relevancia semántica contra `query` y opcionalmente los recorta a `top_k`. |
 | `redactor_service.py` | `RedactorService` — **singleton** que carga (una sola vez) el modelo `Qwen2.5-0.5B-Instruct` (`models_ai/`, no versionado). `redact(markdown)` reescribe el Markdown como prosa (una oración por fila) para que `NuExtractService` tenga menos ambigüedad al alinear columna y valor. |
 | `nuextract_service.py` | `NuExtractService` — **singleton** que carga (una sola vez) el modelo `NuExtract-tiny` (`models_ai/`, no versionado) vía `transformers.AutoModelForCausalLM`. `extract(text, schema)` arma el prompt `<|input|>/### Template/### Text/<|output|>`, genera con el modelo y devuelve el `dict` resultante de parsear el JSON generado. |
@@ -105,6 +105,17 @@ Por qué:
 
 Consecuencia asumida: en filas podadas por el medio, un valor puede quedar bajo una etiqueta `Columna N` que no le corresponde. Se acepta a propósito — el encabezado es genérico (`Columna 1`, `Columna 2`…), no un nombre real del documento, y el prompt de `RedactorService` está escrito para tolerarlo (usa la primera fila como nombres si parece encabezado, y admite explícitamente filas de cualquier ancho). Si en el futuro hiciera falta alineación exacta, la solución no está en `MarkdownService` sino en que el podado deje un marcador de posición en lugar de eliminar la `Col`.
 
+### `services/adapters/` — adapter de binarios por plataforma
+
+`resources/` incluye dos artefactos por binario: el ELF de Linux (`tsubasa`, `xmljava-docker`) y su equivalente nativo de Windows (`tsubasa.exe`, `xmljava.exe`). Ni `TsubasaService` ni `XmlJavaService` conocen esa diferencia — ambos piden un binario lógico (`"tsubasa"` / `"xmljava"`) a un `BinaryAdapter` y reciben la ruta y el `argv` correctos para el sistema operativo actual (patrón **Adapter**):
+
+- **`binary_adapter/base.py`** — `BinaryAdapter` (ABC): `resolve(name) -> str` (ruta absoluta dentro de `resources/`) e `invocation_args(name, *args) -> list[str]` (argv completo para `subprocess`).
+- **`binary_adapter/linux_binary_adapter.py`** — `LinuxBinaryAdapter`: `tsubasa` → `tsubasa`, `xmljava` → `xmljava-docker`. Solo ejecutable dentro de Docker o WSL.
+- **`binary_adapter/windows_binary_adapter.py`** — `WindowsBinaryAdapter`: `tsubasa` → `tsubasa.exe`, `xmljava` → `xmljava.exe`. Ejecutable nativamente en Windows, sin Docker ni WSL.
+- **`binary_adapter/factory.py`** — `BinaryAdapterFactory.create()` (`staticmethod`, no una función suelta) elige el adapter según `platform.system()`.
+
+`TsubasaService` y `XmlJavaService` llaman `BinaryAdapterFactory.create()` una sola vez en su `__init__` y reusan el adapter devuelto. Agregar soporte para otro sistema operativo o otro binario es agregar una entrada de nombre de archivo (o una subclase nueva de `BinaryAdapter`) aquí, nunca una rama `if platform.system() == ...` dentro de un service.
+
 ### `models/` y `views/`
 
 - **`models/pipeline_models.py`**: `PipelineResponse` (Pydantic) — contrato de la respuesta: `filename`, `mode`, `result`.
@@ -112,10 +123,10 @@ Consecuencia asumida: en filas podadas por el medio, un valor puede quedar bajo 
 
 ### `resources/` — binarios externos
 
-- `xmljava-docker` — ELF Linux, convierte un documento a XML (`xmljava-docker <archivo-entrada> [archivo-salida.xml]`).
-- `tsubasa` — ELF Linux, servidor Flask (`polars_ast`) que ejecuta el grafo del pipeline (`POST /execute`) y devuelve `outputs`/`series`/`dataframe` según el tipo de resultado.
+- `xmljava-docker` (Linux) / `xmljava.exe` (Windows) — convierte un documento a XML (`<binario> <archivo-entrada> [archivo-salida.xml]`).
+- `tsubasa` (Linux) / `tsubasa.exe` (Windows) — servidor Flask (`polars_ast`) que ejecuta el grafo del pipeline (`POST /execute`) y devuelve `outputs`/`series`/`dataframe` según el tipo de resultado.
 
-Ambos binarios solo son ejecutables dentro del contenedor Docker (o WSL) — no corren nativamente en Windows.
+Los binarios Linux (`xmljava-docker`, `tsubasa`) solo son ejecutables dentro del contenedor Docker (o WSL). Sus contrapartes `.exe` corren nativamente en Windows. `services/adapters/binary_adapter/` (ver arriba) resuelve cuál usar según la plataforma detectada en runtime.
 
 ## Configuración por variables de entorno
 
