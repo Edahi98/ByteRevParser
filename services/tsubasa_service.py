@@ -4,7 +4,7 @@ import time
 
 import requests
 
-BINARY_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "resources", "tsubasa")
+from services.adapters.binary_adapter import BinaryAdapterFactory
 
 
 class TsubasaService:
@@ -28,14 +28,17 @@ class TsubasaService:
         self.host = host or os.environ.get("TSUBASA_HOST", "127.0.0.1")
         self.port = port or int(os.environ.get("TSUBASA_PORT", 5000))
         self._process: subprocess.Popen | None = None
+        self._binary_adapter = BinaryAdapterFactory.create()
         self._initialized = True
 
     def start(self) -> None:
-        if not os.path.exists(BINARY_PATH):
-            raise FileNotFoundError(f"tsubasa binary not found: {BINARY_PATH}")
+        binary_path = self._binary_adapter.resolve("tsubasa")
+        if not os.path.exists(binary_path):
+            raise FileNotFoundError(f"tsubasa binary not found: {binary_path}")
 
+        argv = self._binary_adapter.invocation_args("tsubasa", "--host", self.host, "--port", str(self.port))
         self._process = subprocess.Popen(
-            [BINARY_PATH, "--host", self.host, "--port", str(self.port)],
+            argv,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
