@@ -1,5 +1,7 @@
+import gc
 import os
 
+import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 MODEL_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models_ai", "Qwen2.5-0.5B-Instruct")
@@ -49,8 +51,9 @@ class RedactorService:
     """Redacta texto narrativo a partir de contenido en Markdown (tablas), para que un
     modelo extractivo (NuExtract) tenga menos ambigüedad al alinear columna y valor.
 
-    Singleton: el modelo es costoso de cargar, así que se carga una sola vez
-    y se reutiliza durante toda la vida del proceso.
+    Singleton de una sola instancia por proceso, pero el modelo (Qwen2.5-0.5B-Instruct)
+    ya no se mantiene cargado entre llamadas: `redact()` lo carga bajo demanda y lo
+    libera de memoria justo después de usarlo.
     """
 
     _instance: "RedactorService | None" = None
@@ -64,30 +67,46 @@ class RedactorService:
         if getattr(self, "_initialized", False):
             return
 
+        self.tokenizer = None
+        self.model = None
+        self._initialized = True
+
+    def _load(self) -> None:
         self.tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
         self.model = AutoModelForCausalLM.from_pretrained(MODEL_PATH)
         self.model.eval()
-        self._initialized = True
+
+    def _unload(self) -> None:
+        self.tokenizer = None
+        self.model = None
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
     def redact(self, markdown: str) -> str:
-        messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": EXAMPLE_TABLE_WITH_HEADER},
-            {"role": "assistant", "content": EXAMPLE_PROSE_WITH_HEADER},
-            {"role": "user", "content": EXAMPLE_TABLE_NO_HEADER},
-            {"role": "assistant", "content": EXAMPLE_PROSE_NO_HEADER},
-            {"role": "user", "content": EXAMPLE_TABLE_NO_HEADER_MULTI},
-            {"role": "assistant", "content": EXAMPLE_PROSE_NO_HEADER_MULTI},
-            {"role": "user", "content": EXAMPLE_PARAGRAPH},
-            {"role": "assistant", "content": EXAMPLE_PARAGRAPH_PROSE},
-            {"role": "user", "content": markdown},
-        ]
-        prompt = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        self._load()
+        try:
+            messages = [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": EXAMPLE_TABLE_WITH_HEADER},
+                {"role": "assistant", "content": EXAMPLE_PROSE_WITH_HEADER},
+                {"role": "user", "content": EXAMPLE_TABLE_NO_HEADER},
+                {"role": "assistant", "content": EXAMPLE_PROSE_NO_HEADER},
+                {"role": "user", "content": EXAMPLE_TABLE_NO_HEADER_MULTI},
+                {"role": "assistant", "content": EXAMPLE_PROSE_NO_HEADER_MULTI},
+                {"role": "user", "content": EXAMPLE_PARAGRAPH},
+                {"role": "assistant", "content": EXAMPLE_PARAGRAPH_PROSE},
+                {"role": "user", "content": markdown},
+            ]
+            prompt = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
 
-        input_ids = self.tokenizer(prompt, return_tensors="pt")
-        output_ids = self.model.generate(**input_ids, max_new_tokens=1024, do_sample=False)
+            input_ids = self.tokenizer(prompt, return_tensors="pt")
+            output_ids = self.model.generate(**input_ids, max_new_tokens=1024, do_sample=False)
 
-        output = self.tokenizer.decode(
-            output_ids[0][input_ids["input_ids"].shape[1] :], skip_special_tokens=True
-        )
+            output = self.tokenizer.decode(
+                output_ids[0][input_ids["input_ids"].shape[1] :], skip_special_tokens=True
+            )
+        finally:
+            self._unload()
+
         return output.strip()
