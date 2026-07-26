@@ -2,19 +2,26 @@ import gc
 import json
 import os
 
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from llama_cpp import Llama
+
+from services.text_normalizer_service import TextNormalizerService
 
 MODELS_AI_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models_ai")
-GGUF_FILE = "NuExtract-1.5-tiny.Q8_0.gguf"
+GGUF_PATH = os.path.join(MODELS_AI_DIR, "NuExtract-1.5-tiny.Q8_0.gguf")
 
 
 class NuExtractService:
     """Extrae datos estructurados de un texto siguiendo un esquema JSON (numind/NuExtract-1.5-tiny).
 
     Singleton de una sola instancia por proceso, pero el modelo ya no se mantiene
-    cargado entre llamadas: `extract()` lo carga bajo demanda y lo libera de
-    memoria justo después de usarlo.
+    cargado entre llamadas: `extract()` lo carga bajo demanda vía llama.cpp
+    (`llama_cpp.Llama`) y lo libera de memoria justo después de usarlo.
+
+    El vocabulario de este .gguf corrompe tildes y la `ñ` al tokenizar (se
+    reproduce igual con `transformers` y con llama.cpp nativo, así que es un
+    problema del propio archivo, no del loader). Mientras se use este .gguf,
+    `TextNormalizerService.strip_accents` limpia la entrada y la salida del
+    modelo para evitar esa corrupción, a costa de perder el diacrítico original.
     """
 
     _instance: "NuExtractService | None" = None
@@ -28,35 +35,26 @@ class NuExtractService:
         if getattr(self, "_initialized", False):
             return
 
-        self.tokenizer = None
-        self.model = None
+        self.llm: Llama | None = None
         self._initialized = True
 
     def _load(self) -> None:
-        self.tokenizer = AutoTokenizer.from_pretrained(MODELS_AI_DIR, gguf_file=GGUF_FILE)
-        self.model = AutoModelForCausalLM.from_pretrained(
-            MODELS_AI_DIR, gguf_file=GGUF_FILE, dtype=torch.bfloat16
-        )
-        self.model.eval()
+        self.llm = Llama(model_path=GGUF_PATH, n_ctx=4096, verbose=False)
 
     def _unload(self) -> None:
-        self.tokenizer = None
-        self.model = None
+        self.llm = None
         gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
 
     def extract(self, text: str, schema: dict) -> dict:
         self._load()
         try:
             schema_str = json.dumps(schema, indent=4)
-            prompt = f"<|input|>\n### Template:\n{schema_str}\n### Text:\n{text}\n<|output|>\n"
+            clean_text = TextNormalizerService.strip_accents(text)
+            prompt = f"<|input|>\n### Template:\n{schema_str}\n### Text:\n{clean_text}\n<|output|>\n"
 
-            input_ids = self.tokenizer(prompt, return_tensors="pt", truncation=True, max_length=4000)
-            output_ids = self.model.generate(**input_ids)
-            output = self.tokenizer.decode(output_ids[0], skip_special_tokens=True)
+            response = self.llm(prompt, max_tokens=1024, temperature=0, stop=["<|end-output|>"])
+            output = TextNormalizerService.strip_accents(response["choices"][0]["text"])
         finally:
             self._unload()
 
-        output_json = output.split("<|output|>")[1].split("<|end-output|>")[0]
-        return json.loads(output_json)
+        return json.loads(output.strip())
