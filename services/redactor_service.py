@@ -4,7 +4,8 @@ import os
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-MODEL_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models_ai", "Qwen2.5-0.5B-Instruct")
+MODELS_AI_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models_ai")
+GGUF_FILE = "qwen2.5-0.5b-instruct-q5_0.gguf"
 
 SYSTEM_PROMPT = (
     "Redactas en prosa fluida y natural el contenido de una tabla en Markdown, usando "
@@ -51,9 +52,9 @@ class RedactorService:
     """Redacta texto narrativo a partir de contenido en Markdown (tablas), para que un
     modelo extractivo (NuExtract) tenga menos ambigüedad al alinear columna y valor.
 
-    Singleton de una sola instancia por proceso, pero el modelo (Qwen2.5-0.5B-Instruct)
-    ya no se mantiene cargado entre llamadas: `redact()` lo carga bajo demanda y lo
-    libera de memoria justo después de usarlo.
+    Singleton de una sola instancia por proceso, pero el modelo
+    (qwen2.5-0.5b-instruct-q5_0.gguf) ya no se mantiene cargado entre llamadas:
+    `redact()` lo carga bajo demanda y lo libera de memoria justo después de usarlo.
     """
 
     _instance: "RedactorService | None" = None
@@ -72,8 +73,10 @@ class RedactorService:
         self._initialized = True
 
     def _load(self) -> None:
-        self.tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
-        self.model = AutoModelForCausalLM.from_pretrained(MODEL_PATH)
+        self.tokenizer = AutoTokenizer.from_pretrained(MODELS_AI_DIR, gguf_file=GGUF_FILE)
+        self.model = AutoModelForCausalLM.from_pretrained(
+            MODELS_AI_DIR, gguf_file=GGUF_FILE, dtype=torch.bfloat16
+        )
         self.model.eval()
 
     def _unload(self) -> None:
