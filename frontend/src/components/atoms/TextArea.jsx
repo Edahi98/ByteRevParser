@@ -1,12 +1,14 @@
 const ACCENT_CLASSES = {
-  blue: 'focus:ring-blue-400 focus:border-blue-400 border-blue-200',
-  purple: 'focus:ring-purple-400 focus:border-purple-400 border-purple-200',
-  teal: 'focus:ring-teal-400 focus:border-teal-400 border-teal-200',
-  orange: 'focus:ring-orange-400 focus:border-orange-400 border-orange-200',
+  blue: 'focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 border-slate-300',
+  sky: 'focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 border-slate-300',
+  cyan: 'focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-600 border-slate-300',
+  indigo: 'focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 border-slate-300',
+  purple: 'focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600 border-slate-300',
+  teal: 'focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 border-slate-300',
 }
 
-export function TextArea({ id, value, onChange, rows = 10, accent = 'orange' }) {
-  const accentStyle = ACCENT_CLASSES[accent] || ACCENT_CLASSES.orange
+export function TextArea({ id, value, onChange, rows = 8, accent = 'blue' }) {
+  const accentStyle = ACCENT_CLASSES[accent] || ACCENT_CLASSES.blue
 
   return (
     <textarea
@@ -15,8 +17,9 @@ export function TextArea({ id, value, onChange, rows = 10, accent = 'orange' }) 
       onChange={onChange}
       rows={rows}
       spellCheck={false}
-      className={`w-full px-3 py-2 font-mono text-sm border rounded-md bg-white/80 focus:outline-none focus:ring-2 ${accentStyle}`}
+      className={`w-full px-3.5 py-2.5 font-mono text-xs text-slate-800 bg-slate-50/70 focus:bg-white border rounded-lg shadow-2xs focus:outline-none transition-all leading-relaxed ${accentStyle}`}
     />
   )
 }
+
 
