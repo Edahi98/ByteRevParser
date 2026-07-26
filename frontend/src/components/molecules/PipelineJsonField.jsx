@@ -1,3 +1,5 @@
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import { faFolderOpen } from '@fortawesome/free-solid-svg-icons'
 import { Label } from '../atoms/Label'
 import { TextArea } from '../atoms/TextArea'
 
@@ -10,7 +12,7 @@ export function PipelineJsonField({ value, onChange, onLoadFile, accent = 'blue'
           htmlFor="pipeline-json-file"
           className="text-xs font-semibold text-blue-600 hover:text-blue-800 cursor-pointer inline-flex items-center gap-1 hover:underline transition-all"
         >
-          <span>📁</span> Cargar desde archivo
+          <span><FontAwesomeIcon icon={faFolderOpen} /></span> Cargar desde archivo
         </label>
       </div>
       <p className="text-xs text-slate-500 mb-1">
@@ -27,5 +29,6 @@ export function PipelineJsonField({ value, onChange, onLoadFile, accent = 'blue'
     </div>
   )
 }
+
 
 
