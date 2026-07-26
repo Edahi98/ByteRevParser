@@ -5,11 +5,12 @@ import os
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-MODEL_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models_ai", "NuExtract-tiny")
+MODELS_AI_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models_ai")
+GGUF_FILE = "NuExtract-1.5-tiny.Q8_0.gguf"
 
 
 class NuExtractService:
-    """Extrae datos estructurados de un texto siguiendo un esquema JSON (numind/NuExtract-tiny).
+    """Extrae datos estructurados de un texto siguiendo un esquema JSON (numind/NuExtract-1.5-tiny).
 
     Singleton de una sola instancia por proceso, pero el modelo ya no se mantiene
     cargado entre llamadas: `extract()` lo carga bajo demanda y lo libera de
@@ -32,8 +33,10 @@ class NuExtractService:
         self._initialized = True
 
     def _load(self) -> None:
-        self.tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
-        self.model = AutoModelForCausalLM.from_pretrained(MODEL_PATH)
+        self.tokenizer = AutoTokenizer.from_pretrained(MODELS_AI_DIR, gguf_file=GGUF_FILE)
+        self.model = AutoModelForCausalLM.from_pretrained(
+            MODELS_AI_DIR, gguf_file=GGUF_FILE, dtype=torch.bfloat16
+        )
         self.model.eval()
 
     def _unload(self) -> None:
