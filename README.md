@@ -167,17 +167,15 @@ huggingface-cli download jinaai/jina-reranker-v2-base-multilingual --local-dir m
 
 ## 🧩 Modelo de extracción estructurada (NuExtract)
 
-`services/nuextract_service.py` usa **[NuExtract-tiny](https://huggingface.co/numind/NuExtract-tiny)** (Qwen2-0.5B fine-tuneado por NuMind) para rellenar un esquema JSON con datos encontrados en un texto. No está versionado en este repo — hay que descargarlo aparte y colocarlo en `models_ai/NuExtract-tiny`:
+`services/nuextract_service.py` usa **NuExtract-1.5-tiny** (fine-tune de NuMind sobre Qwen2.5-0.5B), en formato **GGUF cuantizado** (`Q8_0`). No está versionado en este repo — hay que colocar el archivo en `models_ai/NuExtract-1.5-tiny.Q8_0.gguf` (el nombre debe coincidir exactamente con `GGUF_FILE` en `services/nuextract_service.py`).
 
-```bash
-# Opción A: git + git-lfs
-git clone https://huggingface.co/numind/NuExtract-tiny models_ai/NuExtract-tiny
+> A diferencia de `jina-reranker`, este modelo usa una arquitectura estándar (`Qwen2ForCausalLM`) — no requiere `trust_remote_code=True` ni depende del pin especial de `transformers`. Cargar un `.gguf` con `transformers` requiere el paquete `gguf` (ya en `pyproject.toml`).
 
-# Opción B: huggingface-cli
-huggingface-cli download numind/NuExtract-tiny --local-dir models_ai/NuExtract-tiny
-```
+---
 
-> A diferencia de `jina-reranker`, este modelo usa una arquitectura estándar (`Qwen2ForCausalLM`) — no requiere `trust_remote_code=True` ni depende del pin especial de `transformers`.
+## 🗣️ Modelo de redacción (Qwen)
+
+`services/redactor_service.py` usa **Qwen2.5-0.5B-Instruct**, también en formato **GGUF cuantizado** (`q5_0`). No está versionado en este repo — hay que colocar el archivo en `models_ai/qwen2.5-0.5b-instruct-q5_0.gguf` (el nombre debe coincidir exactamente con `GGUF_FILE` en `services/redactor_service.py`).
 
 ---
 
