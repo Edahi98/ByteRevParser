@@ -4,7 +4,7 @@ import joblib
 
 
 class ModelPersistenceService:
-    """Serializa y deserializa artefactos (modelo, TF-IDF, Word2Vec) con joblib, en memoria.
+    """Serializa y deserializa un pipeline entrenado con joblib, en memoria.
 
     No escribe nada a disco: el caller decide qué hacer con los bytes
     resultantes (por ejemplo, empaquetarlos para exportarlos como descarga).

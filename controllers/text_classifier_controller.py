@@ -34,14 +34,13 @@ def _sanitize_model_name(model_name: str) -> str:
 
 def _load_artifacts_from_archive(archive_bytes: bytes) -> None:
     try:
-        model_bytes, tfidf_bytes, word2vec_bytes = archive_service.extract(archive_bytes)
+        model_bytes, novelty_bytes = archive_service.extract(archive_bytes)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
-    model = persistence_service.load(model_bytes)
-    tfidf = persistence_service.load(tfidf_bytes)
-    word2vec_model = persistence_service.load(word2vec_bytes)
-    text_classification_service.load_artifacts(model, tfidf, word2vec_model)
+    pipeline = persistence_service.load(model_bytes)
+    novelty_pipeline = persistence_service.load(novelty_bytes)
+    text_classification_service.load_artifacts(pipeline, novelty_pipeline)
 
 
 @router.post("/train_text_classifier")
@@ -57,11 +56,10 @@ async def train_text_classifier(file: UploadFile, model_name: str = Form(DEFAULT
         trained = text_classifier_orchestrator.run(csv_path)
 
     model_bytes = persistence_service.dump(trained["model"])
-    tfidf_bytes = persistence_service.dump(trained["tfidf"])
-    word2vec_bytes = persistence_service.dump(trained["word2vec_model"])
+    novelty_bytes = persistence_service.dump(trained["novelty_model"])
     report_bytes = json.dumps(trained["report"], ensure_ascii=False).encode("utf-8")
 
-    archive_bytes = archive_service.build(model_name, model_bytes, tfidf_bytes, word2vec_bytes, report_bytes)
+    archive_bytes = archive_service.build(model_name, model_bytes, novelty_bytes, report_bytes)
 
     return Response(
         content=archive_bytes,
@@ -75,8 +73,8 @@ async def classify_text(phrase: str = Form(...), artifacts: UploadFile = File(..
     archive_bytes = await artifacts.read()
     _load_artifacts_from_archive(archive_bytes)
 
-    etiqueta = text_classification_service.classify(phrase)
-    return render_classify_response(phrase, etiqueta)
+    resultado = text_classification_service.classify(phrase)
+    return render_classify_response(phrase, resultado["etiqueta"], resultado["confianza"])
 
 
 @router.post("/classify_text_batch", response_model=ClassifyTextBatchResponse)
@@ -91,7 +89,7 @@ async def classify_text_batch(file: UploadFile, artifacts: UploadFile = File(...
     contents = await file.read()
     with file_manager.temp_input_file(contents, extension) as csv_path:
         predicciones = predictor_service.predict_from_csv(
-            csv_path, text_classification_service.model, text_classification_service.feature_service
+            csv_path, text_classification_service.pipeline, text_classification_service.novelty_pipeline
         )
 
     return render_classify_batch_response(predicciones)
