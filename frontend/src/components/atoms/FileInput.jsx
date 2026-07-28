@@ -5,6 +5,7 @@ const ACCENT_CLASSES = {
   indigo: 'file:bg-indigo-600 hover:file:bg-indigo-700 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 border-slate-300',
   purple: 'file:bg-purple-600 hover:file:bg-purple-700 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600 border-slate-300',
   teal: 'file:bg-teal-600 hover:file:bg-teal-700 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 border-slate-300',
+  emerald: 'file:bg-emerald-600 hover:file:bg-emerald-700 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 border-slate-300',
 }
 
 export function FileInput({ id, accept, onChange, accent = 'blue' }) {

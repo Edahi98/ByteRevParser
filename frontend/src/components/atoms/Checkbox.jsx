@@ -5,6 +5,7 @@ const ACCENT_CLASSES = {
   indigo: 'border-slate-300 text-indigo-600 focus:ring-2 focus:ring-indigo-500/30 accent-indigo-600',
   purple: 'border-slate-300 text-purple-600 focus:ring-2 focus:ring-purple-500/30 accent-purple-600',
   teal: 'border-slate-300 text-teal-600 focus:ring-2 focus:ring-teal-500/30 accent-teal-600',
+  emerald: 'border-slate-300 text-emerald-600 focus:ring-2 focus:ring-emerald-500/30 accent-emerald-600',
 }
 
 export function Checkbox({ id, checked, onChange, disabled = false, accent = 'blue' }) {

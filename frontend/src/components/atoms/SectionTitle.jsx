@@ -5,6 +5,7 @@ const ACCENT_ICON_CLASSES = {
   indigo: 'bg-indigo-100/80 text-indigo-700 border-indigo-200/70',
   purple: 'bg-purple-100/80 text-purple-700 border-purple-200/70',
   teal: 'bg-teal-100/80 text-teal-700 border-teal-200/70',
+  emerald: 'bg-emerald-100/80 text-emerald-700 border-emerald-200/70',
 }
 
 export function SectionTitle({ children, icon, accent = 'blue' }) {

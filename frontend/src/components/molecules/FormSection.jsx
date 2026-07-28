@@ -7,6 +7,7 @@ const STRIPE_BG_CLASSES = {
   cyan: 'bg-blue-50/40',
   purple: 'bg-purple-50/30',
   teal: 'bg-teal-50/30',
+  emerald: 'bg-emerald-50/30',
 }
 
 export function FormSection({ title, icon, accent = 'blue', subtitle, children }) {
