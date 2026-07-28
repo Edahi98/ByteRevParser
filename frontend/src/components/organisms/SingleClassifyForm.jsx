@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faTag, faStar } from '@fortawesome/free-solid-svg-icons'
+import { faTag, faStar, faCircleQuestion } from '@fortawesome/free-solid-svg-icons'
 import { Button } from '../atoms/Button'
 import { FormSection } from '../molecules/FormSection'
 import { ArtifactsFileField } from '../molecules/ArtifactsFileField'
 import { PhraseField } from '../molecules/PhraseField'
+import { UNKNOWN_LABEL } from '../../data/chartTheme'
 
 export function SingleClassifyForm({ onSubmit, isLoading, result, error, quickArchive }) {
   const [artifactsFile, setArtifactsFile] = useState(null)
@@ -48,7 +49,16 @@ export function SingleClassifyForm({ onSubmit, isLoading, result, error, quickAr
           </p>
         )}
 
-        {result && (
+        {result && result.etiqueta === UNKNOWN_LABEL && (
+          <div className="inline-flex items-center gap-2.5 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 w-fit">
+            <FontAwesomeIcon icon={faCircleQuestion} className="text-slate-400" />
+            <span className="text-sm text-slate-600">
+              No estoy segura de "<strong className="font-semibold">{result.frase}</strong>" — ninguna clase superó el {Math.round(result.confianza * 100)}% de confianza
+            </span>
+          </div>
+        )}
+
+        {result && result.etiqueta !== UNKNOWN_LABEL && (
           <div className="inline-flex items-center gap-2.5 bg-gradient-to-r from-emerald-50 to-teal-50 border border-teal-200/80 rounded-xl px-4 py-3 w-fit">
             <FontAwesomeIcon icon={faStar} className="text-emerald-500" />
             <span className="text-sm text-slate-700">
@@ -57,6 +67,7 @@ export function SingleClassifyForm({ onSubmit, isLoading, result, error, quickAr
             <span className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-xs font-bold px-3 py-1 rounded-full">
               {result.etiqueta}
             </span>
+            <span className="text-xs text-slate-500">({Math.round(result.confianza * 100)}% confianza)</span>
           </div>
         )}
       </FormSection>

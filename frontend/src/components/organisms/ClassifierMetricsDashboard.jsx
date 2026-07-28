@@ -6,13 +6,13 @@ import { ModelComparisonChart } from '../molecules/ModelComparisonChart'
 import { CrossValidationChart } from '../molecules/CrossValidationChart'
 import { ClassificationReportTable } from '../molecules/ClassificationReportTable'
 import { DownloadArtifactsButton } from '../molecules/DownloadArtifactsButton'
-
-const EXPORTED_MODEL_KEY = 'RandomForestClassifier'
+import { MODEL_LABELS } from '../../data/chartTheme'
 
 export function ClassifierMetricsDashboard({ report, archive }) {
   if (!report) return null
 
-  const exportedModelReport = report.resultados_cv[EXPORTED_MODEL_KEY]
+  const exportedModelReport = report.resultados_cv[report.modelo_exportado]
+  const exportedModelLabel = MODEL_LABELS[report.modelo_exportado] || report.modelo_exportado
 
   return (
     <FormSection
@@ -23,7 +23,7 @@ export function ClassifierMetricsDashboard({ report, archive }) {
     >
       <div className="flex flex-wrap items-center justify-between gap-3 -mt-2">
         <span className="inline-flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold px-3 py-1.5 rounded-full">
-          <FontAwesomeIcon icon={faCheck} /> ¡Tu modelo está listo!
+          <FontAwesomeIcon icon={faCheck} /> ¡Tu modelo está listo! (se exportó {exportedModelLabel}, el más confiable de los tres)
         </span>
         {archive && <DownloadArtifactsButton archive={archive} />}
       </div>
