@@ -1,30 +1,34 @@
 import numpy as np
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
+from sklearn.pipeline import Pipeline
+from sklearn.svm import LinearSVC
 
+from services.text_classifier.config_loader_service import ConfigLoaderService
 from services.text_classifier.dataset_service import DatasetService
-from services.text_classifier.feature_service import FeatureService
+from services.text_classifier.feature_pipeline_factory import FeaturePipelineFactory
+from services.text_classifier.model_calibration_service import ModelCalibrationService
 from services.text_classifier.model_evaluation_service import ModelEvaluationService
-from services.text_classifier.spanish_stopwords_service import SpanishStopwordsService
-from services.text_classifier.tokenizer_service import TokenizerService
-from services.text_classifier.word2vec_service import Word2VecService
-
-RANDOM_SEED = 42
+from services.text_classifier.novelty_pipeline_factory import NoveltyPipelineFactory
 
 
 class TextClassifierOrchestrator:
-    """Orquesta el entrenamiento completo: dataset -> features -> modelos -> artefactos entrenados.
+    """Orquesta el entrenamiento completo: dataset -> pipelines candidatos -> mejor modelo.
 
-    No persiste nada en disco: devuelve el modelo, el TF-IDF y el Word2Vec
-    ya entrenados junto con el reporte de evaluación, para que el caller
-    decida cómo exportarlos (p. ej. empaquetados en un ZIP descargable).
+    Cada candidato es un Pipeline de scikit-learn completo (features +
+    clasificador calibrado), evaluado por separado con validación cruzada
+    para evitar fuga de datos entre folds. No persiste nada en disco:
+    devuelve el pipeline ganador junto con el reporte de evaluación, para
+    que el caller decida cómo exportarlo (p. ej. un ZIP descargable).
+    Todos los hiperparámetros vienen de `config/text_classifier_config.json`
+    (vía `ConfigLoaderService`), no están fijos en el código, para que el
+    mismo clasificador sirva para otros datasets sin tocar Python.
     """
 
     def __init__(self):
         self.dataset_service = DatasetService()
-        self.tokenizer_service = TokenizerService()
-        self.word2vec_service = Word2VecService(self.tokenizer_service)
-        self.feature_service = FeatureService(self.word2vec_service, SpanishStopwordsService())
         self.evaluation_service = ModelEvaluationService()
+        self.calibration_service = ModelCalibrationService()
+        self.config = ConfigLoaderService().load()
 
     def run(self, csv_path: str) -> dict:
         df_etiquetado = self.dataset_service.load_labeled(csv_path)
@@ -32,30 +36,54 @@ class TextClassifierOrchestrator:
         etiquetas = np.array(df_etiquetado.get_column("etiqueta").to_list())
         distribucion_clases = self.dataset_service.class_distribution(df_etiquetado)
 
-        self.word2vec_service.train(frases_etiquetadas)
-        self.feature_service.fit(frases_etiquetadas)
+        candidatos = self._build_candidate_pipelines()
 
-        X = self.feature_service.build(frases_etiquetadas)
+        resultados_cv = {}
+        for nombre, pipeline in candidatos.items():
+            resultados_cv[nombre] = self.evaluation_service.evaluate(
+                pipeline, frases_etiquetadas, etiquetas, self.config
+            )
 
-        modelo_rf = RandomForestClassifier(random_state=RANDOM_SEED)
-        modelo_gb = GradientBoostingClassifier(random_state=RANDOM_SEED)
+        nombre_ganador = max(resultados_cv, key=lambda nombre: resultados_cv[nombre]["f1_macro_promedio"])
+        pipeline_final = candidatos[nombre_ganador]
 
-        resultados_rf = self.evaluation_service.evaluate(modelo_rf, X, etiquetas)
-        resultados_gb = self.evaluation_service.evaluate(modelo_gb, X, etiquetas)
-
-        modelo_final = modelo_rf
+        pipeline_novedad = NoveltyPipelineFactory.create(self.config)
+        pipeline_novedad.fit(frases_etiquetadas)
 
         report = {
             "clases": distribucion_clases,
-            "resultados_cv": {
-                "RandomForestClassifier": resultados_rf,
-                "GradientBoostingClassifier": resultados_gb,
-            },
+            "modelo_exportado": nombre_ganador,
+            "resultados_cv": resultados_cv,
         }
 
+        return {"model": pipeline_final, "novelty_model": pipeline_novedad, "report": report}
+
+    def _build_candidate_pipelines(self) -> dict[str, Pipeline]:
+        class_weight = self.config.classifiers.class_weight
+        random_seed = self.config.random_seed
+
+        modelo_rf = self.calibration_service.calibrate(
+            RandomForestClassifier(random_state=random_seed, class_weight=class_weight), self.config
+        )
+        # GradientBoostingClassifier no acepta class_weight en scikit-learn.
+        modelo_gb = self.calibration_service.calibrate(
+            GradientBoostingClassifier(random_state=random_seed), self.config
+        )
+        modelo_svm = self.calibration_service.calibrate(
+            LinearSVC(random_state=random_seed, class_weight=class_weight), self.config
+        )
+
         return {
-            "model": modelo_final,
-            "tfidf": self.feature_service.tfidf,
-            "word2vec_model": self.word2vec_service.model,
-            "report": report,
+            "RandomForestClassifier": Pipeline([
+                ("features", FeaturePipelineFactory.create(self.config)),
+                ("classifier", modelo_rf),
+            ]),
+            "GradientBoostingClassifier": Pipeline([
+                ("features", FeaturePipelineFactory.create(self.config)),
+                ("classifier", modelo_gb),
+            ]),
+            "LinearSVC": Pipeline([
+                ("features", FeaturePipelineFactory.create(self.config)),
+                ("classifier", modelo_svm),
+            ]),
         }
