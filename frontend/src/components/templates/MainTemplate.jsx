@@ -11,5 +11,3 @@ export function MainTemplate({ header, children }) {
     </div>
   )
 }
-
-
