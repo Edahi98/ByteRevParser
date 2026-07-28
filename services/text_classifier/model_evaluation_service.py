@@ -2,15 +2,21 @@ import numpy as np
 from sklearn.metrics import classification_report
 from sklearn.model_selection import StratifiedKFold, cross_val_score
 
-NUM_FOLDS = 5
-RANDOM_SEED = 42
+from models.text_classifier_config import TextClassifierConfig
 
 
 class ModelEvaluationService:
-    """Evalúa un modelo con validación cruzada estratificada y un classification report."""
+    """Evalúa un pipeline (features + clasificador) con validación cruzada estratificada.
 
-    def evaluate(self, model, X: np.ndarray, y: np.ndarray) -> dict:
-        cv = StratifiedKFold(n_splits=NUM_FOLDS, shuffle=True, random_state=RANDOM_SEED)
+    X son las frases crudas: al recibir un Pipeline completo, cada fold de
+    la validación cruzada reentrena también el TF-IDF y el Word2Vec solo
+    con los datos de entrenamiento de ese fold, evitando fuga de datos
+    hacia el fold de validación. El número de folds viene de
+    `TextClassifierConfig`.
+    """
+
+    def evaluate(self, model, X: list[str], y: np.ndarray, config: TextClassifierConfig) -> dict:
+        cv = StratifiedKFold(n_splits=config.evaluation.cv_folds, shuffle=True, random_state=config.random_seed)
         puntajes = cross_val_score(model, X, y, cv=cv, scoring="f1_macro")
 
         model.fit(X, y)
