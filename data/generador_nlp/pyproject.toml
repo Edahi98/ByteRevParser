@@ -1,0 +1,12 @@
+[project]
+name = "generador-nlp"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "nlpaug>=1.1.11",
+    "nltk>=3.10.0",
+    "pandas>=3.0.5",
+    "polars>=1.43.1",
+]
