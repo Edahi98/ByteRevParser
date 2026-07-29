@@ -8,7 +8,6 @@ dependencies = [
     "beautifulsoup4>=4.15.0",
     "einops>=0.8.2",
     "fastapi>=0.139.2",
-    "gensim>=4.4.0",
     "joblib>=1.5.3",
     "llama-cpp-python>=0.3.34",
     "lxml>=6.1.1",
@@ -20,4 +19,9 @@ dependencies = [
     "sentence-transformers>=5.6.1",
     "transformers[torch]>=4.41.0,<5",
     "uvicorn>=0.51.0",
+]
+
+[tool.uv.workspace]
+members = [
+    "data/generador_nlp",
 ]
