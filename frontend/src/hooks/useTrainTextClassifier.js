@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import JSZip from 'jszip'
 import { TRAIN_TEXT_CLASSIFIER_URL } from '../data/apiConfig'
+import { toConfigOverrides } from '../data/modelParamsDefaults'
 
 function extractFilename(contentDisposition) {
   const match = /filename="?([^"]+)"?/.exec(contentDisposition || '')
@@ -13,7 +14,7 @@ export function useTrainTextClassifier() {
   const [error, setError] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
 
-  const train = async ({ file, modelName }) => {
+  const train = async ({ file, modelName, params }) => {
     setIsLoading(true)
     setError(null)
     setReport(null)
@@ -23,6 +24,7 @@ export function useTrainTextClassifier() {
       const formData = new FormData()
       formData.append('file', file)
       if (modelName) formData.append('model_name', modelName)
+      if (params) formData.append('config', JSON.stringify(toConfigOverrides(params)))
 
       const response = await fetch(TRAIN_TEXT_CLASSIFIER_URL, { method: 'POST', body: formData })
 

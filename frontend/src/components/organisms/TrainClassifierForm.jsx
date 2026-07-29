@@ -5,27 +5,31 @@ import { Button } from '../atoms/Button'
 import { FormSection } from '../molecules/FormSection'
 import { ModelNameField } from '../molecules/ModelNameField'
 import { DatasetFileField } from '../molecules/DatasetFileField'
+import { ModelParamsPanel } from '../molecules/ModelParamsPanel'
+import { DEFAULT_MODEL_PARAMS } from '../../data/modelParamsDefaults'
 
 export function TrainClassifierForm({ onSubmit, isLoading, error }) {
   const [file, setFile] = useState(null)
   const [modelName, setModelName] = useState('')
+  const [params, setParams] = useState(DEFAULT_MODEL_PARAMS)
 
   const handleSubmit = (event) => {
     event.preventDefault()
     if (!file) return
-    onSubmit({ file, modelName })
+    onSubmit({ file, modelName, params })
   }
 
   return (
     <form onSubmit={handleSubmit} className="w-full flex flex-col">
       <FormSection
-        title="Crea tu propio clasificador de texto"
+        title="Descubre grupos en tus textos"
         icon={<FontAwesomeIcon icon={faBrain} />}
         accent="emerald"
-        subtitle="Sube algunos ejemplos ya clasificados por ti y en un momento tendrás un modelo capaz de clasificar frases nuevas automáticamente."
+        subtitle="Sube tus frases y una red neuronal descubre sola qué grupos hay entre ellas, sin que tú las clasifiques primero. Como entrena una red de verdad, puede tardar uno o varios minutos según cuántas frases subas."
       >
         <ModelNameField value={modelName} onChange={(event) => setModelName(event.target.value)} />
         <DatasetFileField fileName={file?.name} onChange={(event) => setFile(event.target.files[0] ?? null)} />
+        <ModelParamsPanel params={params} onChange={setParams} />
 
         <div className="pt-2 md:w-72">
           <Button type="submit" variant="green" disabled={!file || isLoading}>
