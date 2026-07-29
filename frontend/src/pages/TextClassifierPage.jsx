@@ -23,7 +23,7 @@ export function TextClassifierPage() {
       header={
         <Header
           title="RedDragon"
-          subtitle="Crea tus propios clasificadores de texto, con las clases que tú definas"
+          subtitle="Descubre automáticamente los grupos ocultos en tus textos, sin necesidad de etiquetarlos"
           accent="green"
         />
       }

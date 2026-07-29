@@ -28,7 +28,7 @@ export function BatchClassifyForm({ onSubmit, isLoading, predictions, error, qui
         title="Clasifica muchas frases de un jalón"
         icon={<FontAwesomeIcon icon={faList} />}
         accent="teal"
-        subtitle="Elige tu modelo entrenado y sube un CSV con varias frases para clasificarlas todas juntas"
+        subtitle="Elige tu modelo entrenado y sube un CSV con varias frases para ubicarlas todas en sus grupos"
       >
         <ArtifactsFileField
           fileName={artifactsFile?.name}

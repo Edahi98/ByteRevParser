@@ -7,7 +7,8 @@ export function PredictionsTable({ predictions }) {
         <thead className="bg-teal-50/80 sticky top-0">
           <tr>
             <th className="text-left font-bold text-teal-800 px-4 py-2.5">Frase</th>
-            <th className="text-left font-bold text-teal-800 px-4 py-2.5">Etiqueta</th>
+            <th className="text-left font-bold text-teal-800 px-4 py-2.5">Grupo</th>
+            <th className="text-left font-bold text-teal-800 px-4 py-2.5">Fragmentos característicos</th>
             <th className="text-right font-bold text-teal-800 px-4 py-2.5">Confianza</th>
           </tr>
         </thead>
@@ -27,6 +28,9 @@ export function PredictionsTable({ predictions }) {
                   >
                     {prediction.etiqueta}
                   </span>
+                </td>
+                <td className="px-4 py-2 text-slate-500 text-xs">
+                  {prediction.terminos_clave?.join(', ')}
                 </td>
                 <td className="px-4 py-2 text-right text-slate-500 text-xs">
                   {Math.round(prediction.confianza * 100)}%
