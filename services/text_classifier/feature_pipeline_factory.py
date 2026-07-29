@@ -1,51 +1,50 @@
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.pipeline import FeatureUnion, Pipeline
+from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import Normalizer
 
 from models.text_classifier_config import TextClassifierConfig
-from services.text_classifier.spanish_stopwords_service import SpanishStopwordsService
-from services.text_classifier.word2vec_vectorizer import Word2VecVectorizer
+from services.text_classifier.autoencoder_embedder import AutoencoderEmbedder
 
 
 class FeaturePipelineFactory:
-    """Construye el FeatureUnion de TF-IDF + Word2Vec (normalizados por separado) como un solo transformer.
+    """Construye el pipeline de features: TF-IDF de n-gramas de caracteres reducido con un autoencoder.
 
     Un `staticmethod` en vez de una función suelta, siguiendo el mismo
-    patrón de fábrica que `BinaryAdapterFactory`. Los hiperparámetros
-    vienen de `TextClassifierConfig`, no están fijos en el código.
+    patrón de fábrica que `BinaryAdapterFactory`. `analyzer='char_wb'`
+    vectoriza por n-gramas de caracteres dentro de cada palabra en vez de
+    por palabra completa, lo que tolera errores de ortografía y ruido de
+    OCR/tipeo sin necesitar que la palabra esté escrita igual que en
+    entrenamiento. `AutoencoderEmbedder` (PyTorch) reduce ese espacio
+    disperso a uno denso y de baja dimensión de forma no lineal —
+    aprendida por backpropagation, no una proyección lineal fija como
+    `TruncatedSVD` — más estable para KMeans e IsolationForest, y que de
+    paso aporta el error de reconstrucción como señal extra de ruido.
+    Todos los hiperparámetros vienen de `TextClassifierConfig`.
     """
 
     @staticmethod
-    def create(config: TextClassifierConfig) -> FeatureUnion:
-        return FeatureUnion([
+    def create(config: TextClassifierConfig) -> Pipeline:
+        return Pipeline([
             (
-                "tfidf",
-                Pipeline([
-                    (
-                        "vectorizer",
-                        TfidfVectorizer(
-                            ngram_range=config.tfidf.ngram_range,
-                            max_features=config.tfidf.max_features,
-                            stop_words=SpanishStopwordsService().get(),
-                        ),
-                    ),
-                    ("normalize", Normalizer()),
-                ]),
+                "vectorizer",
+                TfidfVectorizer(
+                    analyzer=config.tfidf.analyzer,
+                    ngram_range=config.tfidf.ngram_range,
+                    max_features=config.tfidf.max_features,
+                ),
             ),
+            ("normalize", Normalizer()),
             (
-                "word2vec",
-                Pipeline([
-                    (
-                        "vectorizer",
-                        Word2VecVectorizer(
-                            vector_size=config.word2vec.vector_size,
-                            window=config.word2vec.window,
-                            min_count=config.word2vec.min_count,
-                            sg=config.word2vec.sg,
-                            seed=config.random_seed,
-                        ),
-                    ),
-                    ("normalize", Normalizer()),
-                ]),
+                "embedder",
+                AutoencoderEmbedder(
+                    hidden_dim=config.autoencoder.hidden_dim,
+                    bottleneck_dim=config.autoencoder.bottleneck_dim,
+                    epochs=config.autoencoder.epochs,
+                    batch_size=config.autoencoder.batch_size,
+                    learning_rate=config.autoencoder.learning_rate,
+                    contamination=config.novelty.contamination,
+                    seed=config.random_seed,
+                ),
             ),
+            ("normalize_embedding", Normalizer()),
         ])

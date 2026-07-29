@@ -1,31 +1,23 @@
 import polars as pl
 
-REQUIRED_COLUMNS = {"frase", "etiqueta"}
+REQUIRED_COLUMN = "frase"
 
 
 class DatasetService:
-    """Carga y valida el dataset de texto etiquetado con polars."""
+    """Carga y valida el dataset de texto sin etiquetar con polars."""
 
-    def load_labeled(self, csv_path: str) -> pl.DataFrame:
-        """Carga el CSV etiquetado y valida que tenga las columnas requeridas, sin nulos ni frases vacías."""
+    def load_unlabeled(self, csv_path: str) -> pl.DataFrame:
+        """Carga el CSV y valida que tenga la columna 'frase', sin nulos ni frases vacías."""
         df = pl.read_csv(csv_path)
 
-        if not REQUIRED_COLUMNS.issubset(set(df.columns)):
-            raise ValueError(
-                f"El CSV debe contener las columnas {REQUIRED_COLUMNS}, "
-                f"encontradas: {set(df.columns)}"
-            )
+        if REQUIRED_COLUMN not in df.columns:
+            raise ValueError(f"El CSV debe contener la columna '{REQUIRED_COLUMN}', encontradas: {set(df.columns)}")
 
-        if df.select(pl.col("frase", "etiqueta").is_null().any()).to_numpy().any():
-            raise ValueError("El dataset contiene valores nulos en 'frase' o 'etiqueta'.")
+        if df.select(pl.col(REQUIRED_COLUMN).is_null().any()).to_numpy().any():
+            raise ValueError("El dataset contiene valores nulos en 'frase'.")
 
-        df = df.with_columns(pl.col("frase").str.strip_chars().alias("frase"))
-        if (df.get_column("frase") == "").any():
+        df = df.with_columns(pl.col(REQUIRED_COLUMN).str.strip_chars().alias(REQUIRED_COLUMN))
+        if (df.get_column(REQUIRED_COLUMN) == "").any():
             raise ValueError("El dataset contiene frases vacías.")
 
         return df
-
-    def class_distribution(self, df: pl.DataFrame) -> list[dict]:
-        """Cuenta los ejemplos por clase, ordenados alfabéticamente por etiqueta."""
-        conteo_por_clase = df.group_by("etiqueta").agg(pl.len().alias("conteo")).sort("etiqueta")
-        return conteo_por_clase.to_dicts()

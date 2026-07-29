@@ -1,23 +1,22 @@
-from services.text_classifier.config_loader_service import ConfigLoaderService
+import numpy as np
+
+from services.text_classifier.cluster_labeling_service import ClusterLabelingService
 
 UNKNOWN_LABEL = "Sin clasificar"
 
 
 class TextClassificationService:
-    """Clasifica frases usando un pipeline clasificador y un detector de novedad cargados en memoria.
+    """Ubica frases en un grupo (cluster) usando un pipeline de agrupamiento y un detector de ruido cargados en memoria.
 
     Singleton de una sola instancia por proceso. No lee ni escribe nada en
     disco: `load_artifacts()` recibe ambos pipelines ya deserializados
     (por ejemplo, a partir de un ZIP exportado por `/train_text_classifier`
     y subido de vuelta por el cliente) y los deja listos para `classify()`.
-    El detector de novedad actúa como filtro de ruido antes del
-    clasificador: si una frase no se parece a nada visto en
-    entrenamiento, se marca como ruido. Excepción: si el clasificador
-    está muy seguro (>= classification.high_confidence_override en la
-    config) se confía en él y se ignora el veto del detector de novedad,
-    porque con pocos ejemplos de entrenamiento el detector puede
-    rechazar frases válidas que el clasificador sí reconoce con
-    confianza.
+    El detector de ruido combina dos señales independientes: IsolationForest
+    (sklearn, entrenado sobre el embedding) y el error de reconstrucción del
+    autoencoder (PyTorch) para esa misma frase — si cualquiera de las dos
+    la marca como rara, se descarta, sin importar a qué grupo caiga más
+    cerca.
     """
 
     _instance: "TextClassificationService | None" = None
@@ -33,7 +32,7 @@ class TextClassificationService:
 
         self.pipeline = None
         self.novelty_pipeline = None
-        self.config = ConfigLoaderService().load()
+        self.labeling_service = ClusterLabelingService()
         self._initialized = True
 
     def load_artifacts(self, pipeline, novelty_pipeline) -> None:
@@ -41,18 +40,34 @@ class TextClassificationService:
         self.novelty_pipeline = novelty_pipeline
 
     def classify(self, phrase: str) -> dict:
-        """Clasifica una frase; la marca como ruido si el detector de novedad la rechaza o la confianza es baja."""
-        es_ruido = self.novelty_pipeline.predict([phrase])[0] == -1
+        """Ubica una frase en su grupo más cercano; la marca como ruido si el detector de novedad la rechaza."""
+        features = self.pipeline.named_steps["features"]
+        embedder = features.named_steps["embedder"]
 
-        probabilidades = self.pipeline.predict_proba([phrase])[0]
-        indice_max = probabilidades.argmax()
-        confianza = float(probabilidades[indice_max])
+        rechazo_bosque = self.novelty_pipeline.predict([phrase])[0] == -1
+        tfidf_normalizado = features[:2].transform([phrase])
+        error_reconstruccion = embedder.reconstruction_error(tfidf_normalizado)[0]
+        es_ruido = bool(rechazo_bosque or error_reconstruccion > embedder.error_umbral_)
 
-        if confianza >= self.config.classification.high_confidence_override:
-            etiqueta = str(self.pipeline.classes_[indice_max])
-        elif es_ruido or confianza < self.config.classification.confidence_threshold:
-            etiqueta = UNKNOWN_LABEL
-        else:
-            etiqueta = str(self.pipeline.classes_[indice_max])
+        kmeans = self.pipeline.named_steps["cluster"]
+        distancias = kmeans.transform(features.transform([phrase]))[0]
+        indices_ordenados = np.argsort(distancias)
+        cluster_id = int(indices_ordenados[0])
+        confianza = self._margen_confianza(distancias, indices_ordenados)
 
-        return {"etiqueta": etiqueta, "confianza": confianza}
+        if es_ruido:
+            return {"etiqueta": UNKNOWN_LABEL, "confianza": confianza, "terminos_clave": []}
+
+        terminos_clave = self.labeling_service.top_terms(self.pipeline, cluster_id)
+        return {"etiqueta": f"Grupo {cluster_id}", "confianza": confianza, "terminos_clave": terminos_clave}
+
+    def _margen_confianza(self, distancias: np.ndarray, indices_ordenados: np.ndarray) -> float:
+        distancia_mas_cercana = distancias[indices_ordenados[0]]
+        if len(indices_ordenados) == 1:
+            return 1.0
+
+        distancia_segunda_mas_cercana = distancias[indices_ordenados[1]]
+        if distancia_segunda_mas_cercana == 0:
+            return 1.0
+
+        return float((distancia_segunda_mas_cercana - distancia_mas_cercana) / distancia_segunda_mas_cercana)

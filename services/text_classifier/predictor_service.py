@@ -1,21 +1,24 @@
+import numpy as np
 import polars as pl
 
-from services.text_classifier.config_loader_service import ConfigLoaderService
+from services.text_classifier.cluster_labeling_service import ClusterLabelingService
 
 REQUIRED_COLUMN = "frase"
 UNKNOWN_LABEL = "Sin clasificar"
 
 
 class PredictorService:
-    """Predice la clase de frases nuevas leídas desde un CSV con polars.
+    """Ubica en lote frases nuevas leídas desde un CSV con polars en su grupo más cercano.
 
-    Usa un pipeline clasificador y un detector de novedad ya entrenados;
-    el detector actúa como filtro de ruido antes del clasificador. Los
-    umbrales de confianza vienen de `TextClassifierConfig`.
+    Usa un pipeline de agrupamiento y un detector de ruido ya entrenados,
+    igual que `TextClassificationService` pero de forma vectorizada. Los
+    términos clave por cluster se calculan una sola vez por cluster
+    presente en el lote, no por fila, para no repetir el mismo cálculo de
+    `ClusterLabelingService` miles de veces en datasets grandes.
     """
 
     def __init__(self):
-        self.config = ConfigLoaderService().load()
+        self.labeling_service = ClusterLabelingService()
 
     def predict_from_csv(self, csv_path: str, pipeline, novelty_pipeline) -> list[dict]:
         df_nuevas = pl.read_csv(csv_path)
@@ -24,21 +27,53 @@ class PredictorService:
             raise ValueError(f"El CSV de frases nuevas debe tener una columna '{REQUIRED_COLUMN}'.")
 
         frases_nuevas = df_nuevas.get_column(REQUIRED_COLUMN).to_list()
-        es_ruido = novelty_pipeline.predict(frases_nuevas)
-        probabilidades = pipeline.predict_proba(frases_nuevas)
+        rechazo_bosque = novelty_pipeline.predict(frases_nuevas)
 
+        features = pipeline.named_steps["features"]
+        embedder = features.named_steps["embedder"]
+        kmeans = pipeline.named_steps["cluster"]
+
+        tfidf_normalizado = features[:2].transform(frases_nuevas)
+        errores_reconstruccion = embedder.reconstruction_error(tfidf_normalizado)
+        matriz_distancias = kmeans.transform(features.transform(frases_nuevas))
+
+        cache_terminos: dict[int, list[str]] = {}
         predicciones = []
-        for frase, probs_frase, ruido in zip(frases_nuevas, probabilidades, es_ruido):
-            indice_max = probs_frase.argmax()
-            confianza = float(probs_frase[indice_max])
+        for frase, distancias_frase, rechazo, error_reconstruccion in zip(
+            frases_nuevas, matriz_distancias, rechazo_bosque, errores_reconstruccion
+        ):
+            indices_ordenados = np.argsort(distancias_frase)
+            cluster_id = int(indices_ordenados[0])
+            confianza = self._margen_confianza(distancias_frase, indices_ordenados)
+            es_ruido = rechazo == -1 or error_reconstruccion > embedder.error_umbral_
 
-            if confianza >= self.config.classification.high_confidence_override:
-                etiqueta = str(pipeline.classes_[indice_max])
-            elif ruido == -1 or confianza < self.config.classification.confidence_threshold:
-                etiqueta = UNKNOWN_LABEL
-            else:
-                etiqueta = str(pipeline.classes_[indice_max])
+            if es_ruido:
+                predicciones.append(
+                    {"frase": frase, "etiqueta": UNKNOWN_LABEL, "confianza": confianza, "terminos_clave": []}
+                )
+                continue
 
-            predicciones.append({"frase": frase, "etiqueta": etiqueta, "confianza": confianza})
+            if cluster_id not in cache_terminos:
+                cache_terminos[cluster_id] = self.labeling_service.top_terms(pipeline, cluster_id)
+
+            predicciones.append(
+                {
+                    "frase": frase,
+                    "etiqueta": f"Grupo {cluster_id}",
+                    "confianza": confianza,
+                    "terminos_clave": cache_terminos[cluster_id],
+                }
+            )
 
         return predicciones
+
+    def _margen_confianza(self, distancias: np.ndarray, indices_ordenados: np.ndarray) -> float:
+        distancia_mas_cercana = distancias[indices_ordenados[0]]
+        if len(indices_ordenados) == 1:
+            return 1.0
+
+        distancia_segunda_mas_cercana = distancias[indices_ordenados[1]]
+        if distancia_segunda_mas_cercana == 0:
+            return 1.0
+
+        return float((distancia_segunda_mas_cercana - distancia_mas_cercana) / distancia_segunda_mas_cercana)
