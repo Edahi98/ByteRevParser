@@ -1,89 +1,90 @@
 import numpy as np
-from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.pipeline import Pipeline
-from sklearn.svm import LinearSVC
 
+from models.text_classifier_config import TextClassifierConfig
+from services.text_classifier.cluster_labeling_service import ClusterLabelingService
+from services.text_classifier.cluster_search_service import ClusterSearchService
 from services.text_classifier.config_loader_service import ConfigLoaderService
 from services.text_classifier.dataset_service import DatasetService
 from services.text_classifier.feature_pipeline_factory import FeaturePipelineFactory
-from services.text_classifier.model_calibration_service import ModelCalibrationService
-from services.text_classifier.model_evaluation_service import ModelEvaluationService
-from services.text_classifier.novelty_pipeline_factory import NoveltyPipelineFactory
+from services.text_classifier.isolation_forest_factory import IsolationForestFactory
 
 
 class TextClassifierOrchestrator:
-    """Orquesta el entrenamiento completo: dataset -> pipelines candidatos -> mejor modelo.
+    """Orquesta el entrenamiento completo: dataset -> features -> agrupamiento -> detector de ruido.
 
-    Cada candidato es un Pipeline de scikit-learn completo (features +
-    clasificador calibrado), evaluado por separado con validación cruzada
-    para evitar fuga de datos entre folds. No persiste nada en disco:
-    devuelve el pipeline ganador junto con el reporte de evaluación, para
-    que el caller decida cómo exportarlo (p. ej. un ZIP descargable).
-    Todos los hiperparámetros vienen de `config/text_classifier_config.json`
-    (vía `ConfigLoaderService`), no están fijos en el código, para que el
-    mismo clasificador sirva para otros datasets sin tocar Python.
+    No necesita etiquetas: los grupos se descubren solos con KMeans, sobre
+    un único pipeline de features (TF-IDF de n-gramas de caracteres +
+    autoencoder de PyTorch) que se ajusta una sola vez y se reutiliza
+    tanto para el pipeline de agrupamiento como para el detector de
+    ruido, evitando reentrenar la parte más cara dos veces. No persiste
+    nada en disco: devuelve ambos
+    pipelines junto con el reporte, para que el caller decida cómo
+    exportarlos (p. ej. un ZIP descargable). `run()` recibe opcionalmente
+    la configuración a usar (por ejemplo, combinando los valores del
+    archivo con ajustes que el usuario cambió en el frontend); si no se
+    pasa ninguna, usa la cargada por defecto de
+    `config/text_classifier_config.json`, para que el mismo clasificador
+    sirva para otros datasets sin tocar Python.
     """
 
     def __init__(self):
         self.dataset_service = DatasetService()
-        self.evaluation_service = ModelEvaluationService()
-        self.calibration_service = ModelCalibrationService()
+        self.cluster_search_service = ClusterSearchService()
+        self.labeling_service = ClusterLabelingService()
         self.config = ConfigLoaderService().load()
 
-    def run(self, csv_path: str) -> dict:
-        df_etiquetado = self.dataset_service.load_labeled(csv_path)
-        frases_etiquetadas = df_etiquetado.get_column("frase").to_list()
-        etiquetas = np.array(df_etiquetado.get_column("etiqueta").to_list())
-        distribucion_clases = self.dataset_service.class_distribution(df_etiquetado)
+    def run(self, csv_path: str, config: TextClassifierConfig | None = None) -> dict:
+        config = config or self.config
 
-        candidatos = self._build_candidate_pipelines()
+        df = self.dataset_service.load_unlabeled(csv_path)
+        frases = df.get_column("frase").to_list()
 
-        resultados_cv = {}
-        for nombre, pipeline in candidatos.items():
-            resultados_cv[nombre] = self.evaluation_service.evaluate(
-                pipeline, frases_etiquetadas, etiquetas, self.config
-            )
+        features = FeaturePipelineFactory.create(config)
+        X = features.fit_transform(frases)
 
-        nombre_ganador = max(resultados_cv, key=lambda nombre: resultados_cv[nombre]["f1_macro_promedio"])
-        pipeline_final = candidatos[nombre_ganador]
+        resultado_busqueda = self.cluster_search_service.search(X, config)
+        kmeans = resultado_busqueda["mejor_modelo"]
 
-        pipeline_novedad = NoveltyPipelineFactory.create(self.config)
-        pipeline_novedad.fit(frases_etiquetadas)
+        detector_ruido = IsolationForestFactory.create(config)
+        detector_ruido.fit(X)
 
-        report = {
-            "clases": distribucion_clases,
-            "modelo_exportado": nombre_ganador,
-            "resultados_cv": resultados_cv,
-        }
+        pipeline_cluster = Pipeline([("features", features), ("cluster", kmeans)])
+        pipeline_novedad = Pipeline([("features", features), ("detector", detector_ruido)])
 
-        return {"model": pipeline_final, "novelty_model": pipeline_novedad, "report": report}
+        report = self._build_report(pipeline_cluster, kmeans, detector_ruido, X, frases, resultado_busqueda, config)
 
-    def _build_candidate_pipelines(self) -> dict[str, Pipeline]:
-        class_weight = self.config.classifiers.class_weight
-        random_seed = self.config.random_seed
+        return {"model": pipeline_cluster, "novelty_model": pipeline_novedad, "report": report}
 
-        modelo_rf = self.calibration_service.calibrate(
-            RandomForestClassifier(random_state=random_seed, class_weight=class_weight), self.config
-        )
-        # GradientBoostingClassifier no acepta class_weight en scikit-learn.
-        modelo_gb = self.calibration_service.calibrate(
-            GradientBoostingClassifier(random_state=random_seed), self.config
-        )
-        modelo_svm = self.calibration_service.calibrate(
-            LinearSVC(random_state=random_seed, class_weight=class_weight), self.config
-        )
+    def _build_report(
+        self,
+        pipeline_cluster: Pipeline,
+        kmeans,
+        detector_ruido,
+        X: np.ndarray,
+        frases: list[str],
+        resultado_busqueda: dict,
+        config: TextClassifierConfig,
+    ) -> dict:
+        ids_cluster, tamanos = np.unique(kmeans.labels_, return_counts=True)
+        clusters = [
+            {
+                "cluster_id": int(cluster_id),
+                "tamano": int(tamano),
+                "terminos_clave": self.labeling_service.top_terms(pipeline_cluster, int(cluster_id)),
+                "ejemplos": self.labeling_service.representative_phrases(frases, X, kmeans, int(cluster_id)),
+            }
+            for cluster_id, tamano in zip(ids_cluster, tamanos)
+        ]
+
+        embedder = pipeline_cluster.named_steps["features"].named_steps["embedder"]
+        rechazo_bosque = detector_ruido.predict(X) == -1
+        rechazo_autoencoder = embedder.reconstruction_errors_ > embedder.error_umbral_
 
         return {
-            "RandomForestClassifier": Pipeline([
-                ("features", FeaturePipelineFactory.create(self.config)),
-                ("classifier", modelo_rf),
-            ]),
-            "GradientBoostingClassifier": Pipeline([
-                ("features", FeaturePipelineFactory.create(self.config)),
-                ("classifier", modelo_gb),
-            ]),
-            "LinearSVC": Pipeline([
-                ("features", FeaturePipelineFactory.create(self.config)),
-                ("classifier", modelo_svm),
-            ]),
+            "k_elegido": resultado_busqueda["mejor_k"],
+            "silhouette_por_k": resultado_busqueda["silhouette_por_k"],
+            "clusters": clusters,
+            "frases_ruido": int(np.sum(rechazo_bosque | rechazo_autoencoder)),
+            "configuracion_usada": config.model_dump(),
         }

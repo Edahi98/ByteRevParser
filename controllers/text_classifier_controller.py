@@ -9,6 +9,8 @@ from models.text_classifier_models import ClassifyTextBatchResponse, ClassifyTex
 from orchestrators.text_classifier_orchestrator import TextClassifierOrchestrator
 from preservices.preservice_filemanager import PreserviceFileManager
 from services.text_classifier.artifact_archive_service import ArtifactArchiveService
+from services.text_classifier.config_loader_service import ConfigLoaderService
+from services.text_classifier.config_override_service import ConfigOverrideService
 from services.text_classifier.model_persistence_service import ModelPersistenceService
 from services.text_classifier.predictor_service import PredictorService
 from services.text_classifier.text_classification_service import TextClassificationService
@@ -21,6 +23,8 @@ text_classification_service = TextClassificationService()
 predictor_service = PredictorService()
 persistence_service = ModelPersistenceService()
 archive_service = ArtifactArchiveService()
+config_loader_service = ConfigLoaderService()
+config_override_service = ConfigOverrideService()
 file_manager = PreserviceFileManager()
 
 DEFAULT_MODEL_NAME = "text_classifier"
@@ -30,6 +34,22 @@ INVALID_MODEL_NAME_CHARS = re.compile(r"[^A-Za-z0-9_-]+")
 def _sanitize_model_name(model_name: str) -> str:
     sanitized = INVALID_MODEL_NAME_CHARS.sub("_", model_name.strip())
     return sanitized or DEFAULT_MODEL_NAME
+
+
+def _resolve_config(config_json: str | None):
+    base_config = config_loader_service.load()
+    if not config_json:
+        return base_config
+
+    try:
+        overrides = json.loads(config_json)
+    except json.JSONDecodeError as error:
+        raise HTTPException(status_code=400, detail="El JSON de configuración no es válido.") from error
+
+    try:
+        return config_override_service.apply(base_config, overrides)
+    except Exception as error:
+        raise HTTPException(status_code=400, detail=f"Configuración inválida: {error}") from error
 
 
 def _load_artifacts_from_archive(archive_bytes: bytes) -> None:
@@ -44,16 +64,19 @@ def _load_artifacts_from_archive(archive_bytes: bytes) -> None:
 
 
 @router.post("/train_text_classifier")
-async def train_text_classifier(file: UploadFile, model_name: str = Form(DEFAULT_MODEL_NAME)):
+async def train_text_classifier(
+    file: UploadFile, model_name: str = Form(DEFAULT_MODEL_NAME), config: str | None = Form(None)
+):
     extension = Path(file.filename or "").suffix.lower()
     if extension != ".csv":
         raise HTTPException(status_code=400, detail="Se esperaba un archivo CSV.")
 
     model_name = _sanitize_model_name(model_name)
+    resolved_config = _resolve_config(config)
 
     contents = await file.read()
     with file_manager.temp_input_file(contents, extension) as csv_path:
-        trained = text_classifier_orchestrator.run(csv_path)
+        trained = text_classifier_orchestrator.run(csv_path, resolved_config)
 
     model_bytes = persistence_service.dump(trained["model"])
     novelty_bytes = persistence_service.dump(trained["novelty_model"])
@@ -74,7 +97,7 @@ async def classify_text(phrase: str = Form(...), artifacts: UploadFile = File(..
     _load_artifacts_from_archive(archive_bytes)
 
     resultado = text_classification_service.classify(phrase)
-    return render_classify_response(phrase, resultado["etiqueta"], resultado["confianza"])
+    return render_classify_response(phrase, resultado["etiqueta"], resultado["confianza"], resultado["terminos_clave"])
 
 
 @router.post("/classify_text_batch", response_model=ClassifyTextBatchResponse)
