@@ -13,10 +13,10 @@ export function NavLinks() {
         <FontAwesomeIcon icon={faFileLines} /> Extractor
       </NavLink>
       <NavLink
-        to="/clasificador-texto"
+        to="/control-de-cambios"
         className={({ isActive }) => `${LINK_BASE} ${isActive ? LINK_ACTIVE : LINK_INACTIVE}`}
       >
-        <FontAwesomeIcon icon={faBrain} /> Clasificador de texto
+        <FontAwesomeIcon icon={faBrain} /> Control de cambios
       </NavLink>
     </nav>
   )

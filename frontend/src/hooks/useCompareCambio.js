@@ -1,12 +1,12 @@
 import { useState } from 'react'
-import { CLASSIFY_TEXT_URL } from '../data/apiConfig'
+import { COMPARE_CAMBIO_URL } from '../data/apiConfig'
 
-export function useClassifyText() {
+export function useCompareCambio() {
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
 
-  const classify = async ({ phrase, artifactsFile }) => {
+  const compare = async ({ phrase, artifactsFile }) => {
     setIsLoading(true)
     setError(null)
     setResult(null)
@@ -16,11 +16,11 @@ export function useClassifyText() {
       formData.append('phrase', phrase)
       formData.append('artifacts', artifactsFile)
 
-      const response = await fetch(CLASSIFY_TEXT_URL, { method: 'POST', body: formData })
+      const response = await fetch(COMPARE_CAMBIO_URL, { method: 'POST', body: formData })
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.detail || 'Error al clasificar la frase')
+        throw new Error(data.detail || 'Error al comparar la frase')
       }
 
       setResult(data)
@@ -31,5 +31,5 @@ export function useClassifyText() {
     }
   }
 
-  return { classify, result, error, isLoading }
+  return { compare, result, error, isLoading }
 }

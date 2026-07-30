@@ -1,12 +1,12 @@
 import { Route, Routes } from 'react-router-dom'
 import { HomePage } from './pages/HomePage'
-import { TextClassifierPage } from './pages/TextClassifierPage'
+import { DetectorCambiosPage } from './pages/DetectorCambiosPage'
 
 function App() {
   return (
     <Routes>
       <Route path="/" element={<HomePage />} />
-      <Route path="/clasificador-texto" element={<TextClassifierPage />} />
+      <Route path="/control-de-cambios" element={<DetectorCambiosPage />} />
     </Routes>
   )
 }

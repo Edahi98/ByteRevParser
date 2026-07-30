@@ -1,20 +1,32 @@
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faTable } from '@fortawesome/free-solid-svg-icons'
+import { faFileLines } from '@fortawesome/free-solid-svg-icons'
 import { Label } from '../atoms/Label'
 import { FileInput } from '../atoms/FileInput'
 
+const TEXT_ACCENT_CLASSES = {
+  teal: 'text-teal-500',
+  violet: 'text-violet-500',
+  amber: 'text-amber-500',
+}
+
+const FILENAME_ACCENT_CLASSES = {
+  teal: 'text-teal-700',
+  violet: 'text-violet-700',
+  amber: 'text-amber-700',
+}
+
 export function NewPhrasesFileField({ fileName, onChange, accent = 'teal' }) {
+  const iconStyle = TEXT_ACCENT_CLASSES[accent] || TEXT_ACCENT_CLASSES.teal
+  const fileNameStyle = FILENAME_ACCENT_CLASSES[accent] || FILENAME_ACCENT_CLASSES.teal
+
   return (
-    <div className="flex flex-col gap-1">
-      <Label htmlFor="new-phrases-file">Frases que quieres clasificar (archivo CSV)</Label>
+    <div className="flex flex-col gap-1.5">
+      <Label htmlFor="new-phrases-file">
+        <FontAwesomeIcon icon={faFileLines} className={`mr-1.5 ${iconStyle}`} />
+        Frases a revisar
+      </Label>
       <FileInput id="new-phrases-file" accept=".csv" onChange={onChange} accent={accent} />
-      <p className="text-xs text-slate-500">Debe tener una columna "frase" con una frase por fila.</p>
-      {fileName && (
-        <div className="mt-1 inline-flex items-center gap-2 bg-teal-50 border border-teal-200/80 text-teal-800 text-xs font-medium px-3 py-1.5 rounded-md w-fit">
-          <span><FontAwesomeIcon icon={faTable} /></span>
-          <span>Archivo seleccionado: <strong className="font-semibold">{fileName}</strong></span>
-        </div>
-      )}
+      {fileName && <span className={`text-xs font-medium truncate ${fileNameStyle}`}>{fileName}</span>}
     </div>
   )
 }

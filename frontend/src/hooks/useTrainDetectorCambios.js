@@ -1,43 +1,36 @@
 import { useState } from 'react'
 import JSZip from 'jszip'
-import { TRAIN_TEXT_CLASSIFIER_URL } from '../data/apiConfig'
-import { toConfigOverrides } from '../data/modelParamsDefaults'
+import { TRAIN_DETECTOR_CAMBIOS_URL } from '../data/apiConfig'
 
 function extractFilename(contentDisposition) {
   const match = /filename="?([^"]+)"?/.exec(contentDisposition || '')
-  return match ? match[1] : 'text_classifier_artifacts.zip'
+  return match ? match[1] : 'detector_cambios_artifacts.zip'
 }
 
-export function useTrainTextClassifier() {
+export function useTrainDetectorCambios() {
   const [report, setReport] = useState(null)
   const [archive, setArchive] = useState(null)
   const [error, setError] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
 
-  const train = async ({ file, modelName, params }) => {
+  const train = async () => {
     setIsLoading(true)
     setError(null)
     setReport(null)
     setArchive(null)
 
     try {
-      const formData = new FormData()
-      formData.append('file', file)
-      if (modelName) formData.append('model_name', modelName)
-      if (params) formData.append('config', JSON.stringify(toConfigOverrides(params)))
-
-      const response = await fetch(TRAIN_TEXT_CLASSIFIER_URL, { method: 'POST', body: formData })
+      const response = await fetch(TRAIN_DETECTOR_CAMBIOS_URL, { method: 'POST' })
 
       if (!response.ok) {
         const data = await response.json().catch(() => null)
-        throw new Error(data?.detail || 'Error al entrenar el clasificador')
+        throw new Error(data?.detail || 'Error al analizar las frases')
       }
 
       const blob = await response.blob()
       const filename = extractFilename(response.headers.get('content-disposition'))
       const zip = await JSZip.loadAsync(blob)
-      const reportEntry = Object.keys(zip.files).find((name) => name.endsWith('_reporte.json'))
-      const reportText = await zip.file(reportEntry).async('string')
+      const reportText = await zip.file('reporte.json').async('string')
 
       setReport(JSON.parse(reportText))
       setArchive({ blob, filename })

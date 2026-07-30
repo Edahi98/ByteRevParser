@@ -15,7 +15,7 @@ export function DownloadArtifactsButton({ archive }) {
   return (
     <Button variant="green" onClick={handleDownload}>
       <span className="inline-flex items-center justify-center gap-2">
-        <FontAwesomeIcon icon={faDownload} /> Descargar mi modelo entrenado
+        <FontAwesomeIcon icon={faDownload} /> Descargar detector
       </span>
     </Button>
   )

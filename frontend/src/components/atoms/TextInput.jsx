@@ -6,6 +6,8 @@ const ACCENT_CLASSES = {
   purple: 'focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600 border-slate-300',
   teal: 'focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 border-slate-300',
   emerald: 'focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 border-slate-300',
+  violet: 'focus:ring-2 focus:ring-violet-500/20 focus:border-violet-600 border-slate-300',
+  amber: 'focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 border-slate-300',
 }
 
 export function TextInput({ id, type = 'text', value, onChange, placeholder, min, disabled = false, accent = 'blue' }) {
