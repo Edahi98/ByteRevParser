@@ -1,6 +1,5 @@
 import { Header } from '../components/organisms/Header'
 import { PipelineForm } from '../components/organisms/PipelineForm'
-import { DeveloperOptionsPanel } from '../components/organisms/DeveloperOptionsPanel'
 import { ResultPanel } from '../components/organisms/ResultPanel'
 import { MainTemplate } from '../components/templates/MainTemplate'
 import { useExecutePipeline } from '../hooks/useExecutePipeline'
@@ -10,11 +9,9 @@ export function HomePage() {
 
   return (
     <MainTemplate
-      header={<Header title="RedDragon" subtitle="Sube tu documento y obtén los datos de su control de cambios al instante" />}
+      header={<Header title="ByteRevParser" subtitle="Sube tu documento y obtén los datos de su control de cambios al instante" />}
     >
-      <PipelineForm onSubmit={execute} isLoading={isLoading}>
-        {(developerProps) => <DeveloperOptionsPanel {...developerProps} />}
-      </PipelineForm>
+      <PipelineForm onSubmit={execute} isLoading={isLoading} />
       <ResultPanel result={result} error={error} isLoading={isLoading} />
     </MainTemplate>
   )

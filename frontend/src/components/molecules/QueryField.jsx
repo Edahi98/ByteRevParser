@@ -1,22 +1,22 @@
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import { faKey } from '@fortawesome/free-solid-svg-icons'
 import { Label } from '../atoms/Label'
 import { TextInput } from '../atoms/TextInput'
 
-export function QueryField({ value, onChange, accent = 'cyan' }) {
+export function QueryField({ value, onChange, accent = 'blue' }) {
   return (
-    <div className="flex flex-col gap-1">
-      <Label htmlFor="pipeline-query">¿Qué estás buscando? (opcional)</Label>
+    <div className="flex flex-col gap-1.5">
+      <Label htmlFor="pipeline-query">
+        <FontAwesomeIcon icon={faKey} className="mr-1.5 text-blue-500" />
+        Palabra clave (opcional)
+      </Label>
       <TextInput
         id="pipeline-query"
         value={value}
         onChange={onChange}
-        placeholder="ej. ingresos por producto, resumen de ventas..."
+        placeholder="ej. ingresos por producto"
         accent={accent}
       />
-      <p className="text-xs text-slate-500">
-        Escribe palabras o conceptos clave para filtrar y ordenar los fragmentos más relevantes.
-      </p>
     </div>
   )
 }
-
-

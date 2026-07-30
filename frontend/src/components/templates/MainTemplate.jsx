@@ -6,7 +6,7 @@ export function MainTemplate({ header, children }) {
         {children}
       </main>
       <footer className="w-full py-6 text-center text-xs text-slate-500 border-t border-slate-200/60 bg-white">
-        RedDragon &copy; {new Date().getFullYear()} OLAN Manufacturing Systems
+        ByteRevParser &copy; {new Date().getFullYear()} RevEngine API Services
       </footer>
     </div>
   )

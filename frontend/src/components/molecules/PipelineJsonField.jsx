@@ -1,23 +1,17 @@
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faFolderOpen } from '@fortawesome/free-solid-svg-icons'
+import { faFolderOpen, faCheck } from '@fortawesome/free-solid-svg-icons'
 import { Label } from '../atoms/Label'
-import { TextArea } from '../atoms/TextArea'
 
-export function PipelineJsonField({ value, onChange, onLoadFile, accent = 'blue' }) {
+export function PipelineJsonField({ fileName, onLoadFile }) {
   return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center justify-between mb-0.5">
-        <Label htmlFor="pipeline-json">JSON del pipeline</Label>
-        <label
-          htmlFor="pipeline-json-file"
-          className="text-xs font-semibold text-blue-600 hover:text-blue-800 cursor-pointer inline-flex items-center gap-1 hover:underline transition-all"
-        >
-          <span><FontAwesomeIcon icon={faFolderOpen} /></span> Cargar desde archivo
-        </label>
-      </div>
-      <p className="text-xs text-slate-500 mb-1">
-        Configuración técnica del proceso (no la edites si no sabes qué hace)
-      </p>
+    <div className="flex flex-col gap-1.5">
+      <Label htmlFor="pipeline-json-file">Configuración</Label>
+      <label
+        htmlFor="pipeline-json-file"
+        className="inline-flex items-center justify-center gap-2 w-full sm:w-fit bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg py-2 px-4 transition-all text-sm border border-slate-200 cursor-pointer shadow-sm"
+      >
+        <FontAwesomeIcon icon={faFolderOpen} className="text-violet-500" /> Cargar archivo
+      </label>
       <input
         id="pipeline-json-file"
         type="file"
@@ -25,10 +19,11 @@ export function PipelineJsonField({ value, onChange, onLoadFile, accent = 'blue'
         onChange={onLoadFile}
         className="hidden"
       />
-      <TextArea id="pipeline-json" value={value} onChange={onChange} accent={accent} />
+      {fileName && (
+        <span className="text-xs text-blue-700 font-medium inline-flex items-center gap-1.5">
+          <FontAwesomeIcon icon={faCheck} /> {fileName}
+        </span>
+      )}
     </div>
   )
 }
-
-
-
