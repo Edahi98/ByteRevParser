@@ -7,8 +7,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from controllers.detector_cambios_controller import router as detector_cambios_router
 from controllers.pipeline_controller import router
-from controllers.text_classifier_controller import router as text_classifier_router
 from services.tsubasa_service import TsubasaService
 
 FRONTEND_DIST = Path(__file__).parent / "frontend" / "dist"
@@ -31,7 +31,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(router)
-app.include_router(text_classifier_router)
+app.include_router(detector_cambios_router)
 
 if FRONTEND_DIST.exists():
     app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="frontend")

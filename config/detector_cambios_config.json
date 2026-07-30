@@ -1,0 +1,17 @@
+{
+  "random_seed": 42,
+  "tfidf": {
+    "analyzer": "char_wb",
+    "ngram_range": [3, 5],
+    "max_features": 20000
+  },
+  "siamese": {
+    "hidden_dim": 256,
+    "embedding_dim": 100,
+    "margin": 1.0,
+    "epochs": 20,
+    "batch_size": 64,
+    "learning_rate": 0.001,
+    "pairs_per_anchor": 2
+  }
+}
