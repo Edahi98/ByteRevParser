@@ -1,53 +1,66 @@
+from typing import Callable
+
 import numpy as np
 import torch
-from scipy import sparse
 from sklearn.base import BaseEstimator, TransformerMixin
 from torch import optim
 
 from services.detector_cambios_service.contrastive_loss_module import ContrastiveLossModule
+from services.detector_cambios_service.deep_siamese_encoder_module import DeepSiameseEncoderModule
 from services.detector_cambios_service.phrase_pair_sampler import PhrasePairSampler
-from services.detector_cambios_service.siamese_encoder_module import SiameseEncoderModule
 
 INFERENCE_CHUNK_SIZE = 512
 
 
 class DetectorCambiosEncoder(BaseEstimator, TransformerMixin):
-    """Transformer de scikit-learn que entrena y usa una red siamesa de PyTorch para detectar frases de control de cambios equivalentes.
+    """Transformer de scikit-learn que entrena y usa un encoder profundo (Transformer de caracteres) para detectar frases de control de cambios equivalentes.
 
-    `fit(X, y)` recibe en `y` el `origin_id` de cada fila (el vínculo con
-    la frase original de la que salió, no una clase a predecir) —
-    aprovecha el mecanismo estándar `Pipeline.fit(X, y)` de scikit-learn
-    para propagar esa información hasta aquí. Por dentro entrena por
-    mini-lotes sobre pares (frase, frase) armados por `PhrasePairSampler`,
-    minimizando una pérdida contrastiva: pares del mismo origen quedan
-    cerca en el embedding, pares de origen distinto quedan lejos. Al
-    terminar, guarda `similarity_threshold_` (punto medio entre la
-    distancia promedio de pares positivos y negativos) para que el
-    caller pueda decidir "mismo cambio o no" comparando contra ese umbral.
-    Densifica solo un lote a la vez desde la matriz TF-IDF dispersa, igual
-    que el autoencoder que reemplaza, para no materializar la matriz
-    completa en memoria.
+    `fit(X, y)` recibe secuencias de índices de caracteres ya tokenizadas
+    por `CharTokenizer` (no una matriz TF-IDF: la representación de cada
+    frase la aprende `DeepSiameseEncoderModule` de punta a punta) y, en
+    `y`, el `origin_id` de cada fila — el vínculo con la frase original
+    de la que salió, no una clase a predecir. Aprovecha el mecanismo
+    estándar `Pipeline.fit(X, y)` de scikit-learn para propagar esa
+    información hasta aquí. Por dentro entrena por mini-lotes sobre
+    pares (frase, frase) armados por `PhrasePairSampler`, minimizando
+    una pérdida contrastiva: pares del mismo origen quedan cerca en el
+    embedding, pares de origen distinto quedan lejos. Al terminar,
+    guarda `similarity_threshold_` (punto medio entre la distancia
+    promedio de pares positivos y negativos) para que el caller pueda
+    decidir "mismo cambio o no" comparando contra ese umbral.
     """
 
     def __init__(
         self,
-        hidden_dim: int = 256,
+        embed_dim: int = 64,
+        num_layers: int = 3,
+        num_heads: int = 4,
+        ff_dim: int = 128,
         embedding_dim: int = 100,
+        max_length: int = 160,
+        dropout: float = 0.1,
         margin: float = 1.0,
         epochs: int = 20,
         batch_size: int = 64,
         learning_rate: float = 0.001,
         pairs_per_anchor: int = 2,
         seed: int = 42,
+        progress_callback: Callable[[int, int], None] | None = None,
     ):
-        self.hidden_dim = hidden_dim
+        self.embed_dim = embed_dim
+        self.num_layers = num_layers
+        self.num_heads = num_heads
+        self.ff_dim = ff_dim
         self.embedding_dim = embedding_dim
+        self.max_length = max_length
+        self.dropout = dropout
         self.margin = margin
         self.epochs = epochs
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.pairs_per_anchor = pairs_per_anchor
         self.seed = seed
+        self.progress_callback = progress_callback
 
     def fit(self, X, y=None):
         if y is None:
@@ -57,15 +70,25 @@ class DetectorCambiosEncoder(BaseEstimator, TransformerMixin):
         rng = np.random.default_rng(self.seed)
         torch.manual_seed(self.seed)
 
+        vocab_size = int(X.max()) + 1
         self.device_ = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model_ = SiameseEncoderModule(X.shape[1], self.hidden_dim, self.embedding_dim).to(self.device_)
+        self.model_ = DeepSiameseEncoderModule(
+            vocab_size=vocab_size,
+            embed_dim=self.embed_dim,
+            num_layers=self.num_layers,
+            num_heads=self.num_heads,
+            ff_dim=self.ff_dim,
+            embedding_dim=self.embedding_dim,
+            max_length=self.max_length,
+            dropout=self.dropout,
+        ).to(self.device_)
 
         optimizador = optim.Adam(self.model_.parameters(), lr=self.learning_rate)
         funcion_perdida = ContrastiveLossModule(margin=self.margin)
         sampler = PhrasePairSampler()
 
         self.model_.train()
-        for _ in range(self.epochs):
+        for epoca in range(self.epochs):
             anclas, pares, etiquetas = sampler.build_pairs(origin_ids, self.pairs_per_anchor, rng)
             orden = rng.permutation(len(anclas))
 
@@ -81,6 +104,9 @@ class DetectorCambiosEncoder(BaseEstimator, TransformerMixin):
                 perdida = funcion_perdida(embedding_a, embedding_b, lote_y)
                 perdida.backward()
                 optimizador.step()
+
+            if self.progress_callback is not None:
+                self.progress_callback(epoca + 1, self.epochs)
 
         self._calibrar_umbral(X, origin_ids, rng)
         return self
@@ -137,6 +163,4 @@ class DetectorCambiosEncoder(BaseEstimator, TransformerMixin):
             yield X[inicio : inicio + INFERENCE_CHUNK_SIZE]
 
     def _a_tensor(self, lote) -> torch.Tensor:
-        denso = lote.toarray() if sparse.issparse(lote) else lote
-        denso = np.asarray(denso, dtype=np.float32)
-        return torch.from_numpy(denso).to(self.device_)
+        return torch.as_tensor(np.asarray(lote, dtype=np.int64), device=self.device_)
