@@ -1,15 +1,18 @@
 from pydantic import BaseModel, Field
 
 
-class TfidfConfig(BaseModel):
-    analyzer: str = "char_wb"
-    ngram_range: tuple[int, int] = (3, 5)
-    max_features: int = 20000
+class TokenizerConfig(BaseModel):
+    max_length: int = 160
+    lowercase: bool = True
 
 
 class SiameseConfig(BaseModel):
-    hidden_dim: int = 256
+    embed_dim: int = 64
+    num_layers: int = 3
+    num_heads: int = 4
+    ff_dim: int = 128
     embedding_dim: int = 100
+    dropout: float = 0.1
     margin: float = 1.0
     epochs: int = 20
     batch_size: int = 64
@@ -19,5 +22,5 @@ class SiameseConfig(BaseModel):
 
 class DetectorCambiosConfig(BaseModel):
     random_seed: int = 42
-    tfidf: TfidfConfig = Field(default_factory=TfidfConfig)
+    tokenizer: TokenizerConfig = Field(default_factory=TokenizerConfig)
     siamese: SiameseConfig = Field(default_factory=SiameseConfig)

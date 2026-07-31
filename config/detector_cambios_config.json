@@ -1,13 +1,16 @@
 {
   "random_seed": 42,
-  "tfidf": {
-    "analyzer": "char_wb",
-    "ngram_range": [3, 5],
-    "max_features": 20000
+  "tokenizer": {
+    "max_length": 160,
+    "lowercase": true
   },
   "siamese": {
-    "hidden_dim": 256,
+    "embed_dim": 64,
+    "num_layers": 3,
+    "num_heads": 4,
+    "ff_dim": 128,
     "embedding_dim": 100,
+    "dropout": 0.1,
     "margin": 1.0,
     "epochs": 20,
     "batch_size": 64,
