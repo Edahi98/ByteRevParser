@@ -1,3 +1,5 @@
+from typing import Callable
+
 import numpy as np
 
 from models.detector_cambios_config import DetectorCambiosConfig
@@ -37,7 +39,12 @@ class DetectorCambiosOrchestrator:
         self.hard_negative_service = HardNegativeService()
         self.config = ConfigLoaderService().load()
 
-    def run(self, csv_path: str, config: DetectorCambiosConfig | None = None) -> dict:
+    def run(
+        self,
+        csv_path: str,
+        config: DetectorCambiosConfig | None = None,
+        progress_callback: Callable[[int, int], None] | None = None,
+    ) -> dict:
         config = config or self.config
 
         df = self.dataset_service.load(csv_path)
@@ -52,7 +59,7 @@ class DetectorCambiosOrchestrator:
             [origin_ids_reales, np.array(origin_ids_ajenas, dtype=origin_ids_reales.dtype)]
         )
 
-        features = FeaturePipelineFactory.create(config)
+        features = FeaturePipelineFactory.create(config, progress_callback)
         embeddings_todas = features.fit_transform(frases_todas, origin_ids_todas)
 
         encoder = features.named_steps["encoder"]
