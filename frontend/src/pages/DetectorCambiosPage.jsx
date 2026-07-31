@@ -9,7 +9,7 @@ import { useCompareCambio } from '../hooks/useCompareCambio'
 import { useCompareCambioBatch } from '../hooks/useCompareCambioBatch'
 
 export function DetectorCambiosPage() {
-  const { train, report, archive, error: trainError, isLoading: isTraining } = useTrainDetectorCambios()
+  const { train, report, archive, progress: trainProgress, error: trainError, isLoading: isTraining } = useTrainDetectorCambios()
   const { compare, result, error: compareError, isLoading: isComparing } = useCompareCambio()
   const {
     compareBatch,
@@ -29,7 +29,7 @@ export function DetectorCambiosPage() {
         }}
       >
         <div className="max-w-5xl mx-auto px-4 md:px-6 flex flex-col gap-6">
-          <TrainDetectorCambiosForm onSubmit={train} isLoading={isTraining} error={trainError} />
+          <TrainDetectorCambiosForm onSubmit={train} isLoading={isTraining} progress={trainProgress} error={trainError} />
           <DetectorCambiosMetricsDashboard report={report} archive={archive} />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
