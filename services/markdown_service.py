@@ -27,8 +27,6 @@ class MarkdownService:
             return BeautifulSoup(xml_content, "html.parser")
 
     def _cell_text(self, elem) -> str:
-        # Una celda debe ocupar una sola línea y no puede contener `|` sin escapar,
-        # o rompe la tabla al renderizarse.
         text = elem.get_text(separator=" ", strip=True)
         return re.sub(r"\s+", " ", text).replace("|", r"\|").strip()
 
@@ -43,12 +41,6 @@ class MarkdownService:
         return rows
 
     def _pad(self, row: list[str], width: int) -> list[str]:
-        # El podado elimina celdas sueltas, no filas completas, así que dos filas de la
-        # misma tabla pueden llegar con distinta cantidad de `Col`. Markdown exige que
-        # todas las filas tengan el mismo ancho, y el XML podado ya no conserva en qué
-        # posición original estaba cada celda superviviente: lo único fiable es su orden
-        # relativo. Por eso se rellena por la derecha — mantiene intacto ese orden y no
-        # afirma una posición concreta para el hueco, que sería inventada.
         return row + [""] * (width - len(row))
 
     def _render_row(self, cells: list[str]) -> str:
