@@ -1,20 +1,3 @@
 {
-  "random_seed": 42,
-  "tokenizer": {
-    "max_length": 160,
-    "lowercase": true
-  },
-  "siamese": {
-    "embed_dim": 64,
-    "num_layers": 3,
-    "num_heads": 4,
-    "ff_dim": 128,
-    "embedding_dim": 100,
-    "dropout": 0.1,
-    "margin": 1.0,
-    "epochs": 20,
-    "batch_size": 64,
-    "learning_rate": 0.001,
-    "pairs_per_anchor": 2
-  }
+  "random_seed": 42
 }

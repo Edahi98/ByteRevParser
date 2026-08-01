@@ -3,9 +3,8 @@ from pydantic import BaseModel
 
 class CompareCambioResponse(BaseModel):
     frase: str
-    es_conocida: bool
-    distancia: float
-    frase_mas_parecida: str
+    es_cambio: bool
+    probabilidad: float
 
 
 class CompareCambioBatchResponse(BaseModel):

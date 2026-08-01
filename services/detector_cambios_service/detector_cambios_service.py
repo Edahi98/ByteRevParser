@@ -1,17 +1,11 @@
-UNKNOWN_LABEL = "nueva"
-
-
 class DetectorCambiosService:
-    """Compara una frase nueva contra el banco de frases de control de cambios aprendidas, usando un pipeline cargado en memoria.
+    """Compara una frase nueva contra el detector de control de cambios entrenado, usando un encoder cargado en memoria.
 
     Singleton de una sola instancia por proceso. No lee ni escribe nada
-    en disco: `load_artifacts()` recibe el pipeline ya deserializado (por
-    ejemplo, a partir de un ZIP exportado por `/train_detector_cambios` y
-    subido de vuelta por el cliente) y lo deja listo para `compare()`. La
-    decisión de "mismo cambio o no" se basa en la distancia al vecino más
-    cercano del banco de referencia guardado en el propio encoder
-    (`reference_embeddings_`) contra su `similarity_threshold_`, ambos
-    calculados durante el entrenamiento.
+    en disco: `load_artifacts()` recibe el `DetectorCambiosEncoder` ya
+    deserializado (por ejemplo, a partir de un ZIP exportado por
+    `/train_detector_cambios` y subido de vuelta por el cliente) y lo
+    deja listo para `compare()`.
     """
 
     _instance: "DetectorCambiosService | None" = None
@@ -25,24 +19,13 @@ class DetectorCambiosService:
         if getattr(self, "_initialized", False):
             return
 
-        self.pipeline = None
+        self.encoder = None
         self._initialized = True
 
-    def load_artifacts(self, pipeline) -> None:
-        self.pipeline = pipeline
+    def load_artifacts(self, encoder) -> None:
+        self.encoder = encoder
 
     def compare(self, phrase: str) -> dict:
-        """Compara una frase contra el banco de frases de control de cambios aprendidas; dice si habla de lo mismo que alguna de ellas."""
-        encoder = self.pipeline.named_steps["encoder"]
-        embedding = self.pipeline.transform([phrase])
-        distancia, indice_mas_cercano = encoder.nearest_reference(embedding)
-
-        distancia = float(distancia[0])
-        frase_mas_parecida = str(encoder.reference_phrases_[indice_mas_cercano[0]])
-        es_conocida = distancia <= encoder.similarity_threshold_
-
-        return {
-            "es_conocida": bool(es_conocida),
-            "distancia": distancia,
-            "frase_mas_parecida": frase_mas_parecida,
-        }
+        """Compara una frase contra el detector entrenado; dice si es control de cambios y con qué probabilidad."""
+        es_cambio, probabilidad = self.encoder.predict([phrase])
+        return {"es_cambio": bool(es_cambio[0]), "probabilidad": float(probabilidad[0])}
