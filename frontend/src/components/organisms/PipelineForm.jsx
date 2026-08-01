@@ -6,9 +6,6 @@ import { GradientCard } from '../molecules/GradientCard'
 import { FileField } from '../molecules/FileField'
 import { SchemaBuilderField } from '../molecules/SchemaBuilderField'
 import { PipelineJsonField } from '../molecules/PipelineJsonField'
-import { QueryField } from '../molecules/QueryField'
-import { TopKField } from '../molecules/TopKField'
-import { pipelineModes } from '../../data/pipelineModes'
 import { useFileText } from '../../hooks/useFileText'
 
 export function PipelineForm({ onSubmit, isLoading }) {
@@ -16,8 +13,6 @@ export function PipelineForm({ onSubmit, isLoading }) {
   const [simpleFields, setSimpleFields] = useState(['Versión', 'Fecha de revisión', 'Elaboró'])
   const [pipeline, setPipeline] = useState(null)
   const [pipelineFileName, setPipelineFileName] = useState(null)
-  const [query, setQuery] = useState('')
-  const [topK, setTopK] = useState('')
 
   const loadPipelineFromFile = useFileText(setPipeline)
 
@@ -28,27 +23,21 @@ export function PipelineForm({ onSubmit, isLoading }) {
     loadPipelineFromFile(selectedFile)
   }
 
+  const validFields = simpleFields.map((f) => f.trim()).filter((f) => f.length > 0)
+
   const handleSubmit = (event) => {
     event.preventDefault()
-    if (!file || !pipeline) return
+    if (!file || !pipeline || validFields.length === 0) return
 
-    let finalSchema = null
-    const validFields = simpleFields.map((f) => f.trim()).filter((f) => f.length > 0)
-    if (validFields.length > 0) {
-      const schemaObj = {}
-      validFields.forEach((fieldName) => {
-        schemaObj[fieldName] = ''
-      })
-      finalSchema = JSON.stringify(schemaObj, null, 2)
-    }
+    const schemaObj = {}
+    validFields.forEach((fieldName) => {
+      schemaObj[fieldName] = ''
+    })
 
     onSubmit({
       file,
       pipeline,
-      mode: pipelineModes[0].value,
-      query: query || null,
-      topK: query ? topK || null : null,
-      schema: finalSchema,
+      schema: JSON.stringify(schemaObj, null, 2),
     })
   }
 
@@ -67,7 +56,7 @@ export function PipelineForm({ onSubmit, isLoading }) {
               <FileField accent="blue" fileName={file?.name} onChange={(event) => setFile(event.target.files[0] ?? null)} />
               
               <div className="pt-1 mt-4 border-t border-slate-100">
-                <Button type="submit" disabled={!file || !pipeline || isLoading}>
+                <Button type="submit" disabled={!file || !pipeline || validFields.length === 0 || isLoading}>
                   {isLoading ? (
                     <span className="inline-flex items-center justify-center gap-2">
                       <svg className="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24" fill="none">
@@ -87,11 +76,6 @@ export function PipelineForm({ onSubmit, isLoading }) {
             <GradientCard icon={<FontAwesomeIcon icon={faSliders} />} title="Configuración" gradient="violet">
               <PipelineJsonField fileName={pipelineFileName} onLoadFile={handleLoadPipelineFile} />
               <SchemaBuilderField accent="violet" fields={simpleFields} onChange={setSimpleFields} />
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <QueryField value={query} onChange={(event) => setQuery(event.target.value)} />
-                <TopKField value={topK} onChange={(event) => setTopK(event.target.value)} disabled={!query} />
-              </div>
             </GradientCard>
           </div>
         </div>

@@ -55,7 +55,7 @@ export function ResultPanel({ result, error, isLoading }) {
           </div>
           <div className="p-6">
             <pre className="w-full overflow-auto max-h-96 font-mono text-xs bg-slate-900 text-slate-100 rounded-2xl p-5 leading-relaxed shadow-inner">
-              {typeof result.result === 'string' ? result.result : JSON.stringify(result.result, null, 2)}
+              {JSON.stringify(result.result, null, 2)}
             </pre>
           </div>
         </div>
