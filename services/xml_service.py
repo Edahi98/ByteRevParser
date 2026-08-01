@@ -114,29 +114,3 @@ class XmlService:
 
         return output_path
 
-    def _block_text(self, elem, valid_cleaned: set[str]) -> str:
-        if elem.name == "Table":
-            parts: list[str] = []
-            for row_elem in elem.find_all("Row"):
-                for col_elem in row_elem.find_all("Col"):
-                    text = col_elem.get_text(strip=True)
-                    if text and self._is_valid(text, valid_cleaned):
-                        parts.append(text)
-            return " ".join(parts)
-
-        text = elem.get_text(strip=True)
-        return text if text and self._is_valid(text, valid_cleaned) else ""
-
-    def extract_text(self, xml_path: str, valid_data: dict | list) -> list[str]:
-        soup = self._build_soup(self._read_file(xml_path), fallback=True)
-        self._strip_boilerplate(soup)
-
-        valid_cleaned = self._valid_cleaned_set(valid_data)
-
-        blocks: list[str] = []
-        for elem in soup.find_all(["Paragraph", "Table"]):
-            text = self._block_text(elem, valid_cleaned)
-            if text:
-                blocks.append(text)
-
-        return blocks

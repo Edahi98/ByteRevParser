@@ -4,7 +4,7 @@ from pathlib import Path
 from fastapi import APIRouter, Form, HTTPException, UploadFile
 
 from models.pipeline_models import PipelineResponse
-from orchestrators.ocr_orchestrator import ALLOWED_MODES, OcrOrchestrator
+from orchestrators.ocr_orchestrator import OcrOrchestrator
 from orchestrators.xml_orchestrator import ALLOWED_EXTENSIONS
 from preservices.preservice_filemanager import PreserviceFileManager
 from views.pipeline_view import render_pipeline_response
@@ -19,10 +19,7 @@ file_manager = PreserviceFileManager()
 async def execute_pipeline(
     file: UploadFile,
     pipeline: str = Form(...),
-    mode: str = Form(...),
-    query: str | None = Form(None),
-    top_k: int | None = Form(None),
-    schema: str | None = Form(None),
+    schema: str = Form(...),
 ):
     extension = Path(file.filename or "").suffix.lower()
 
@@ -32,21 +29,11 @@ async def execute_pipeline(
             detail=f"Unsupported file type '{extension}'. Allowed: {sorted(ALLOWED_EXTENSIONS)}",
         )
 
-    if mode not in ALLOWED_MODES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported mode '{mode}'. Allowed: {sorted(ALLOWED_MODES)}",
-        )
-
     pipeline_data = json.loads(pipeline)
-    schema_data = json.loads(schema) if schema else None
+    schema_data = json.loads(schema)
     contents = await file.read()
 
     with file_manager.temp_input_file(contents, extension) as input_path:
-        result = ocr_orchestrator.run(input_path, pipeline_data, mode, query, top_k, schema_data)
+        result = ocr_orchestrator.run(input_path, pipeline_data, schema_data)
 
-        if not schema_data and mode == "pruned_xml":
-            with open(result, "r", encoding="utf-8") as f:
-                result = f.read()
-
-    return render_pipeline_response(file.filename, mode, result)
+    return render_pipeline_response(file.filename, result)
