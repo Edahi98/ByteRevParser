@@ -38,8 +38,8 @@ service → binarios externos (resources/*) o librerías (bs4, pdf2docx, request
 ### `controllers/` — Controller
 
 - **`pipeline_controller.py`**: expone `POST /execute_pipeline`.
-  - Recibe `file` (UploadFile), `pipeline` (JSON como string), `mode` (`"pruned_xml"` | `"text_list"`) y opcionalmente `query`/`top_k` (reranking con `CrossEncoderService`) y `schema` (JSON como string, extracción estructurada con `NuExtractService`) vía `multipart/form-data`.
-  - Valida extensión (`ALLOWED_EXTENSIONS`, importado de `xml_orchestrator`) y `mode` (`ALLOWED_MODES`, importado de `ocr_orchestrator`).
+  - Recibe `file` (UploadFile), `pipeline` y `schema` (JSON como string, extracción estructurada con `NuExtractService`) vía `multipart/form-data`.
+  - Valida extensión (`ALLOWED_EXTENSIONS`, importado de `xml_orchestrator`).
   - Usa `PreserviceFileManager` para materializar el archivo subido en disco, delega la orquestación a `OcrOrchestrator.run(...)` y arma la respuesta con `views.pipeline_view`.
 
 ### `preservices/` — preparación de insumos
@@ -51,17 +51,13 @@ service → binarios externos (resources/*) o librerías (bs4, pdf2docx, request
 - **`xml_orchestrator.py`**: `XmlOrchestrator.get_xml(input_path) -> str`.
   Convierte `doc/docx/xls/xlsx/pdf` a XML: si la extensión es `.pdf`, primero pasa por `PdfService.convert_to_docx`; luego siempre pasa por `XmlJavaService.convert` (binario `resources/xmljava-docker`).
 
-- **`ocr_orchestrator.py`**: `OcrOrchestrator.run(input_path, pipeline, mode, query=None, top_k=None, schema=None) -> str | list[str] | dict`.
+- **`ocr_orchestrator.py`**: `OcrOrchestrator.run(input_path, pipeline, schema) -> dict`.
   Flujo completo:
   1. `XmlOrchestrator.get_xml(input_path)` → `xml_path`.
   2. `XmlService.extract_tables(xml_path)` → datos extraídos del XML (lista plana).
   3. `PipelineService.replace_data(pipeline, extracted_data)` → reemplaza cada llave `"data"` del pipeline (en cualquier nivel de anidamiento) con `{"dato": extracted_data}` (columna `"dato"` con la lista extraída).
   4. `TsubasaService.execute(pipeline)` → envía el pipeline transformado al servidor Tsubasa y recibe una lista plana de valores.
-  5. (Opcional) si se pasa `query`, `CrossEncoderService.rerank(query, result_data, top_k)` reordena/recorta `result_data` por relevancia semántica.
-  6. Si se pasa `schema`, se **desvía del resto del flujo** e ignora `mode`: `XmlService.prune_xml(xml_path, result_data)` → XML podado, `MarkdownService.to_markdown(pruned_path)` lo renderiza en Markdown, `RedactorService.redact(markdown)` lo convierte en prosa y `NuExtractService.extract(prose, schema)` rellena el esquema JSON contra ella — **su resultado se devuelve de inmediato**.
-  7. Si no hay `schema`, según `mode`:
-     - `"pruned_xml"` → `XmlService.prune_xml(xml_path, result_data)`, devuelve la ruta del XML podado.
-     - `"text_list"` → `XmlService.extract_text(xml_path, result_data)`, devuelve la lista de strings filtrada.
+  5. `XmlService.prune_xml(xml_path, result_data)` → XML podado, `MarkdownService.to_markdown(pruned_path)` lo renderiza en Markdown, `RedactorService.redact(markdown)` lo convierte en prosa y `NuExtractService.extract(prose, schema)` rellena el esquema JSON contra ella — ese resultado es lo que se devuelve.
 
 ### `services/` — lógica atómica
 
@@ -69,11 +65,10 @@ service → binarios externos (resources/*) o librerías (bs4, pdf2docx, request
 |---|---|
 | `pdf_service.py` | `PdfService.convert_to_docx(pdf_path)` — convierte PDF a DOCX vía `pdf2docx`. |
 | `xmljava_service.py` | `XmlJavaService.convert(input_path)` — ejecuta el binario `xmljava` (subprocess) para convertir un archivo a XML; la ruta y el nombre exacto del binario los resuelve `BinaryAdapterFactory` (ver [`services/adapters/`](#servicesadapters--adapter-de-binarios-por-plataforma)). |
-| `xml_service.py` | Operaciones sobre árboles XML con BeautifulSoup: `extract_tables` (aplana `Paragraph`/`Table→Row→Col`), `prune_xml` (elimina nodos hoja cuyo texto no está en `valid_data`, limpia nodos vacíos, escribe un XML podado), `extract_text` (recorre `Paragraph`/`Table` y devuelve un string por bloque, filtrado por `valid_data`). |
+| `xml_service.py` | Operaciones sobre árboles XML con BeautifulSoup: `extract_tables` (aplana `Paragraph`/`Table→Row→Col`), `prune_xml` (elimina nodos hoja cuyo texto no está en `valid_data`, limpia nodos vacíos, escribe un XML podado). |
 | `markdown_service.py` | `MarkdownService.to_markdown(xml_path)` — renderiza como Markdown un XML **ya podado** (la salida de `XmlService.prune_xml`): `Paragraph` → línea de texto, `Table` → tabla `\| Columna N \|`. No filtra ni valida nada; asume que el XML recibido ya contiene solo lo relevante. Como `prune_xml` poda por celda y no por fila, las filas de una misma tabla pueden llegar con distinto número de `Col`: se normalizan al ancho de la fila más larga **rellenando por la derecha** con celdas vacías (ver [criterio de alineación](#alineación-de-columnas-tras-el-podado)). |
 | `pipeline_service.py` | `PipelineService.replace_data(pipeline, extracted_data)` — recorre recursivamente un JSON (dicts/listas anidadas) y reemplaza cada llave `"data"` por `{"dato": extracted_data}` — Tsubasa espera que `data` en un nodo `scan` sea un dict columnar (`{columna: [valores]}`), no una lista plana. |
 | `tsubasa_service.py` | `TsubasaService` — **singleton** que gestiona el ciclo de vida del binario `tsubasa` (`start`/`stop`, subprocess, resuelto vía `BinaryAdapterFactory`) y llama a su endpoint HTTP `/execute` (vía `requests`), aplanando la respuesta (`outputs`/`series`/`dataframe`) a una lista de valores puros. |
-| `cross_encoder_service.py` | `CrossEncoderService` — **singleton** (una instancia por proceso) que carga el modelo `jina-reranker-v2-base-multilingual` (`models_ai/`, no versionado) **bajo demanda**: `rerank(query, candidates, top_k=None)` lo carga, reordena `candidates` por relevancia semántica contra `query`, opcionalmente los recorta a `top_k`, y libera el modelo de memoria antes de devolver el resultado. |
 | `redactor_service.py` | `RedactorService` — **singleton** (una instancia por proceso) que carga el modelo `qwen2.5-0.5b-instruct-q8_0.gguf` (GGUF cuantizado, `models_ai/`, no versionado) **bajo demanda** vía `llama_cpp.Llama` (no `transformers`, ver nota abajo): `redact(markdown)` lo carga, reescribe el Markdown como prosa (una oración por fila) para que `NuExtractService` tenga menos ambigüedad al alinear columna y valor, y libera el modelo de memoria al terminar. |
 | `nuextract_service.py` | `NuExtractService` — **singleton** (una instancia por proceso) que carga el modelo `NuExtract-1.5-tiny.Q8_0.gguf` (GGUF cuantizado, `models_ai/`, no versionado) **bajo demanda** vía `llama_cpp.Llama`: `extract(text, schema)` lo carga, arma el prompt `<|input|>/### Template/### Text/<|output|>`, genera con el modelo, libera el modelo de memoria y devuelve el `dict` resultante de parsear el JSON generado. |
 | `text_normalizer_service.py` | `TextNormalizerService.strip_accents(text)` — quita diacríticos (tildes, `ñ`) vía normalización Unicode NFKD. `RedactorService` y `NuExtractService` lo usan en la entrada y la salida del modelo porque el vocabulario de sus `.gguf` corrompe esos caracteres al tokenizar (ver nota abajo). |
@@ -148,13 +143,13 @@ Definidas en el [Dockerfile](../Dockerfile), junto con `EXPOSE 8000 5000`.
 
 ```
 Cliente
-  │  multipart/form-data: file, pipeline (json), mode [, query, top_k] [, schema]
+  │  multipart/form-data: file, pipeline (json), schema (json)
   ▼
 pipeline_controller.execute_pipeline
-  │  valida extensión y mode
+  │  valida extensión
   │  file_manager.temp_input_file(contents, extension) → input_path
   ▼
-ocr_orchestrator.run(input_path, pipeline, mode, query, top_k, schema)
+ocr_orchestrator.run(input_path, pipeline, schema)
   │
   ├─ xml_orchestrator.get_xml(input_path)
   │     └─ (si .pdf) pdf_service.convert_to_docx → xmljava_service.convert → xml_path
@@ -162,16 +157,11 @@ ocr_orchestrator.run(input_path, pipeline, mode, query, top_k, schema)
   ├─ xml_service.extract_tables(xml_path) → extracted_data
   ├─ pipeline_service.replace_data(pipeline, extracted_data) → pipeline transformado
   ├─ tsubasa_service.execute(pipeline) → result_data (lista de valores)
-  ├─ (si query) cross_encoder_service.rerank(query, result_data, top_k) → result_data
   │
-  ├─ (si schema) xml_service.prune_xml(xml_path, result_data) → xml_path_podado
-  │              markdown_service.to_markdown(xml_path_podado) → markdown
-  │              redactor_service.redact(markdown) → prosa
-  │              nuextract_service.extract(prosa, schema) → dict, devuelve directo
-  │
-  └─ (si no hay schema) mode == "pruned_xml"?
-        sí → xml_service.prune_xml(xml_path, result_data) → xml_path_podado
-        no → xml_service.extract_text(xml_path, result_data) → list[str]
+  ├─ xml_service.prune_xml(xml_path, result_data) → xml_path_podado
+  ├─ markdown_service.to_markdown(xml_path_podado) → markdown
+  ├─ redactor_service.redact(markdown) → prosa
+  └─ nuextract_service.extract(prosa, schema) → dict
   ▼
-pipeline_view.render_pipeline_response(filename, mode, result) → PipelineResponse (JSON)
+pipeline_view.render_pipeline_response(filename, result) → PipelineResponse (JSON)
 ```
