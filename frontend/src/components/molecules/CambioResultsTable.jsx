@@ -5,8 +5,8 @@ export function CambioResultsTable({ resultados }) {
         <thead className="bg-teal-50/80 sticky top-0">
           <tr>
             <th className="text-left font-bold text-teal-800 px-4 py-2.5">Frase</th>
-            <th className="text-left font-bold text-teal-800 px-4 py-2.5">¿La conoce?</th>
-            <th className="text-left font-bold text-teal-800 px-4 py-2.5">Se parece más a</th>
+            <th className="text-left font-bold text-teal-800 px-4 py-2.5">¿Es un cambio?</th>
+            <th className="text-left font-bold text-teal-800 px-4 py-2.5">Probabilidad</th>
           </tr>
         </thead>
         <tbody>
@@ -16,15 +16,15 @@ export function CambioResultsTable({ resultados }) {
               <td className="px-4 py-2">
                 <span
                   className={
-                    resultado.es_conocida
+                    resultado.es_cambio
                       ? 'inline-block bg-gradient-to-r from-emerald-100 to-teal-100 text-teal-800 text-xs font-semibold px-2.5 py-1 rounded-full border border-teal-200/70'
                       : 'inline-block bg-slate-100 text-slate-600 text-xs font-semibold px-2.5 py-1 rounded-full border border-slate-200'
                   }
                 >
-                  {resultado.es_conocida ? 'Sí, la conoce' : 'Es nueva'}
+                  {resultado.es_cambio ? 'Sí, es un cambio' : 'No es un cambio'}
                 </span>
               </td>
-              <td className="px-4 py-2 text-slate-500 text-xs">{resultado.frase_mas_parecida}</td>
+              <td className="px-4 py-2 text-slate-500 text-xs">{Math.round(resultado.probabilidad * 100)}%</td>
             </tr>
           ))}
         </tbody>

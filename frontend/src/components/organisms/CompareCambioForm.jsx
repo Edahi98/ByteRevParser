@@ -42,26 +42,25 @@ export function CompareCambioForm({ onSubmit, isLoading, result, error, quickArc
           </p>
         )}
 
-        {result && !result.es_conocida && (
+        {result && !result.es_cambio && (
           <div className="inline-flex items-center gap-2.5 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 w-fit">
             <FontAwesomeIcon icon={faCircleQuestion} className="text-slate-400" />
             <span className="text-sm text-slate-600">
               "<strong className="font-semibold">{result.frase}</strong>" no es un cambio
+              <span className="text-slate-400"> ({Math.round(result.probabilidad * 100)}% de probabilidad)</span>
             </span>
           </div>
         )}
 
-        {result && result.es_conocida && (
+        {result && result.es_cambio && (
           <div className="flex flex-col gap-2 bg-gradient-to-r from-violet-50 to-fuchsia-50 border border-violet-200/80 rounded-xl px-4 py-3 w-fit">
             <div className="inline-flex items-center gap-2.5">
               <FontAwesomeIcon icon={faStar} className="text-violet-500" />
               <span className="text-sm text-slate-700">
-                "<strong className="font-semibold">{result.frase}</strong>" ya la conoce
+                "<strong className="font-semibold">{result.frase}</strong>" sí es un cambio
               </span>
             </div>
-            <p className="text-xs text-slate-500">
-              Se parece a: "<strong className="font-medium">{result.frase_mas_parecida}</strong>"
-            </p>
+            <p className="text-xs text-slate-500">Probabilidad: {Math.round(result.probabilidad * 100)}%</p>
           </div>
         )}
       </GradientCard>
