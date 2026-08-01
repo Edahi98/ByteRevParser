@@ -20,8 +20,3 @@ dependencies = [
     "transformers[torch]>=4.41.0,<5",
     "uvicorn>=0.51.0",
 ]
-
-[tool.uv.workspace]
-members = [
-    "data/generador_nlp",
-]
