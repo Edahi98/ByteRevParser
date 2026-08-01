@@ -10,6 +10,8 @@ MODEL_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "models_ai", "jina-embeddings-v3"
 )
 
+UMBRAL_ES_CAMBIO = 0.73
+
 
 class DetectorCambiosEncoder:
     """Detecta si una frase habla de control de cambios: embeddings preentrenados (jina-embeddings-v3) + regresión logística.
@@ -18,8 +20,11 @@ class DetectorCambiosEncoder:
     aprendido en su preentrenamiento, así que aquí no se entrena ningún
     encoder desde cero — solo la regresión logística sobre esos
     embeddings. El modelo se carga bajo demanda y se libera justo
-    después de usarse (igual que `CrossEncoderService`), porque pesa
-    ~1.6GB y solo hace falta durante `fit`/`predict`.
+    después de usarse (igual que `RedactorService`/`NuExtractService`), porque pesa
+    ~1.6GB y solo hace falta durante `fit`/`predict`. `es_cambio` exige
+    `UMBRAL_ES_CAMBIO` (0.73) en vez del 0.5 por defecto de la regresión
+    logística, para no marcar como cambio una frase donde el modelo
+    apenas se inclina más hacia sí que hacia no (p. ej. un 55%).
     """
 
     def __init__(self, seed: int = 42):
@@ -33,9 +38,9 @@ class DetectorCambiosEncoder:
 
     def predict(self, frases: list[str]) -> tuple[np.ndarray, np.ndarray]:
         embeddings = self._encode(frases)
-        es_cambio = self.classifier.predict(embeddings)
         probabilidad = self.classifier.predict_proba(embeddings)[:, 1]
-        return es_cambio.astype(bool), probabilidad
+        es_cambio = probabilidad >= UMBRAL_ES_CAMBIO
+        return es_cambio, probabilidad
 
     def _encode(self, frases: list[str]) -> np.ndarray:
         embedder = SentenceTransformer(MODEL_PATH, trust_remote_code=True)
