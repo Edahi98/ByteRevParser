@@ -165,6 +165,20 @@ huggingface-cli download jinaai/jina-reranker-v2-base-multilingual --local-dir m
 
 ---
 
+## 🔎 Modelo de embeddings (detector de control de cambios)
+
+`services/detector_cambios_service/detector_cambios_encoder.py` usa el modelo **[jina-embeddings-v3](https://huggingface.co/jinaai/jina-embeddings-v3)** vía `sentence-transformers` para vectorizar frases, sobre las que entrena una regresión logística simple. No está versionado en este repo (pesa varios GB) — hay que descargarlo aparte y colocarlo en `models_ai/jina-embeddings-v3`:
+
+```bash
+# Opción A: git + git-lfs
+git clone https://huggingface.co/jinaai/jina-embeddings-v3 models_ai/jina-embeddings-v3
+
+# Opción B: huggingface-cli
+huggingface-cli download jinaai/jina-embeddings-v3 --local-dir models_ai/jina-embeddings-v3
+```
+
+---
+
 ## 🧩 Modelo de extracción estructurada (NuExtract)
 
 `services/nuextract_service.py` usa **NuExtract-1.5-tiny** (fine-tune de NuMind sobre Qwen2.5-0.5B), en formato **GGUF cuantizado** (`Q8_0`), cargado con **`llama_cpp.Llama`** (no `transformers`). No está versionado en este repo — hay que colocar el archivo en `models_ai/NuExtract-1.5-tiny.Q8_0.gguf` (el nombre debe coincidir exactamente con `GGUF_PATH` en `services/nuextract_service.py`).
