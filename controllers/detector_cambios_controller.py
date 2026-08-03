@@ -9,6 +9,7 @@ from models.detector_cambios_models import CompareCambioBatchResponse, CompareCa
 from orchestrators.detector_cambios_orchestrator import DetectorCambiosOrchestrator
 from preservices.preservice_filemanager import PreserviceFileManager
 from services.detector_cambios_service.artifact_archive_service import ArtifactArchiveService
+from services.detector_cambios_service.artifact_loader_service import ArtifactLoaderService
 from services.detector_cambios_service.dataset_service import CALIDAD_PATH, CAMBIOS_PATH
 from services.detector_cambios_service.detector_cambios_batch_service import DetectorCambiosBatchService
 from services.detector_cambios_service.detector_cambios_service import DetectorCambiosService
@@ -22,6 +23,7 @@ detector_cambios_service = DetectorCambiosService()
 detector_cambios_batch_service = DetectorCambiosBatchService()
 persistence_service = ModelPersistenceService()
 archive_service = ArtifactArchiveService()
+artifact_loader_service = ArtifactLoaderService()
 file_manager = PreserviceFileManager()
 
 MODEL_NAME = "control_cambios"
@@ -29,11 +31,10 @@ MODEL_NAME = "control_cambios"
 
 def _load_artifacts_from_archive(archive_bytes: bytes) -> None:
     try:
-        model_bytes = archive_service.extract(archive_bytes)
+        encoder = artifact_loader_service.load(archive_bytes)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
-    encoder = persistence_service.load(model_bytes)
     detector_cambios_service.load_artifacts(encoder)
 
 

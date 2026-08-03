@@ -67,13 +67,21 @@ class XmlService:
     def _clean(self, s) -> str:
         return "".join(str(s).split())
 
-    def _valid_cleaned_set(self, valid_data: dict | list) -> set[str]:
+    def cleaned_values(self, valid_data: dict | list) -> set[str]:
+        """Normaliza `valid_data` a las claves con las que compara `matches`."""
         valid_set: set[str] = set()
         self._extract_values(valid_data, valid_set)
 
         return {self._clean(v) for v in valid_set}
 
-    def _is_valid(self, text: str, valid_cleaned: set[str]) -> bool:
+    def matches(self, text: str, valid_cleaned: set[str]) -> bool:
+        """Único criterio de correspondencia texto-XML ↔ valor del pipeline.
+
+        Es público porque `ChangeScopeService` tiene que emparejar con
+        exactamente el mismo rasero que usará después `prune_xml`: con un
+        criterio propio acabaría descartando valores que la poda sí habría
+        conservado, decidiendo por encima del pipeline.
+        """
         cleaned = self._clean(text).lower()
 
         for v in valid_cleaned:
@@ -86,16 +94,17 @@ class XmlService:
         return False
 
     def prune_xml(self, xml_path: str, valid_data: dict | list) -> str:
+        print(valid_data)
         soup = self._build_soup(self._read_file(xml_path), fallback=True)
         self._strip_boilerplate(soup)
 
-        valid_cleaned = self._valid_cleaned_set(valid_data)
+        valid_cleaned = self.cleaned_values(valid_data)
 
         # 1. Poda los nodos hoja con texto que no está en los datos válidos
         for node in soup.find_all():
             if self._is_leaf(node):
                 text = node.get_text()
-                if self._clean(text) and not self._is_valid(text, valid_cleaned):
+                if self._clean(text) and not self.matches(text, valid_cleaned):
                     node.decompose()
 
         # 2. Limpia recursivamente los nodos que quedaron vacíos
@@ -110,6 +119,7 @@ class XmlService:
 
         output_path = xml_path.replace(".xml", f"_pruned_{uuid.uuid4().hex[:6]}.xml")
         with open(output_path, "w", encoding="utf-8") as f:
+            print(soup.prettify())
             f.write(soup.prettify())
 
         return output_path

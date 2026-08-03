@@ -1,44 +1,39 @@
-import { useState } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faFileLines, faSliders } from '@fortawesome/free-solid-svg-icons'
+import { faFileLines, faRotateLeft, faSliders } from '@fortawesome/free-solid-svg-icons'
 import { Button } from '../atoms/Button'
 import { GradientCard } from '../molecules/GradientCard'
 import { FileField } from '../molecules/FileField'
 import { SchemaBuilderField } from '../molecules/SchemaBuilderField'
 import { PipelineJsonField } from '../molecules/PipelineJsonField'
-import { useFileText } from '../../hooks/useFileText'
+import { ArtifactsFileField } from '../molecules/ArtifactsFileField'
+import { usePipelineForm } from '../../hooks/usePipelineForm'
 
 export function PipelineForm({ onSubmit, isLoading }) {
-  const [file, setFile] = useState(null)
-  const [simpleFields, setSimpleFields] = useState(['Versión', 'Fecha de revisión', 'Elaboró'])
-  const [pipeline, setPipeline] = useState(null)
-  const [pipelineFileName, setPipelineFileName] = useState(null)
-
-  const loadPipelineFromFile = useFileText(setPipeline)
+  const {
+    file,
+    artifacts,
+    pipeline,
+    pipelineFileName,
+    schemaFields,
+    schema,
+    isReady,
+    isDirty,
+    selectDocument,
+    selectArtifacts,
+    loadPipelineFile,
+    changeSchemaFields,
+    resetForm,
+  } = usePipelineForm()
 
   const handleLoadPipelineFile = (event) => {
-    const selectedFile = event.target.files[0]
-    if (!selectedFile) return
-    setPipelineFileName(selectedFile.name)
-    loadPipelineFromFile(selectedFile)
+    loadPipelineFile(event.target.files[0])
   }
-
-  const validFields = simpleFields.map((f) => f.trim()).filter((f) => f.length > 0)
 
   const handleSubmit = (event) => {
     event.preventDefault()
-    if (!file || !pipeline || validFields.length === 0) return
+    if (!isReady) return
 
-    const schemaObj = {}
-    validFields.forEach((fieldName) => {
-      schemaObj[fieldName] = ''
-    })
-
-    onSubmit({
-      file,
-      pipeline,
-      schema: JSON.stringify(schemaObj, null, 2),
-    })
+    onSubmit({ file, pipeline, schema, artifacts })
   }
 
   return (
@@ -53,29 +48,55 @@ export function PipelineForm({ onSubmit, isLoading }) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
             {/* Card 1: Documento a procesar */}
             <GradientCard icon={<FontAwesomeIcon icon={faFileLines} />} title="Documento" gradient="blue">
-              <FileField accent="blue" fileName={file?.name} onChange={(event) => setFile(event.target.files[0] ?? null)} />
-              
-              <div className="pt-1 mt-4 border-t border-slate-100">
-                <Button type="submit" disabled={!file || !pipeline || validFields.length === 0 || isLoading}>
-                  {isLoading ? (
-                    <span className="inline-flex items-center justify-center gap-2">
-                      <svg className="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24" fill="none">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                      </svg>
-                      Extrayendo...
+              {/* La `key` remonta el input nativo al limpiar: sin ella conserva su
+                  FileList y volver a elegir el mismo archivo no dispara `change`. */}
+              <FileField
+                key={file ? 'documento-cargado' : 'documento-vacio'}
+                accent="blue"
+                fileName={file?.name}
+                onChange={(event) => selectDocument(event.target.files[0] ?? null)}
+              />
+
+              <div className="pt-1 mt-4 border-t border-slate-100 flex items-center gap-2">
+                <div className="flex-1">
+                  <Button type="submit" disabled={!isReady || isLoading}>
+                    {isLoading ? (
+                      <span className="inline-flex items-center justify-center gap-2">
+                        <svg className="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        Extrayendo...
+                      </span>
+                    ) : (
+                      'Extraer'
+                    )}
+                  </Button>
+                </div>
+                <div className="shrink-0">
+                  <Button variant="secondary" onClick={resetForm} disabled={!isDirty || isLoading}>
+                    <span className="inline-flex items-center gap-1.5">
+                      <FontAwesomeIcon icon={faRotateLeft} /> Limpiar
                     </span>
-                  ) : (
-                    'Extraer'
-                  )}
-                </Button>
+                  </Button>
+                </div>
               </div>
             </GradientCard>
 
             {/* Card 2: Configuración de Extracción */}
             <GradientCard icon={<FontAwesomeIcon icon={faSliders} />} title="Configuración" gradient="violet">
-              <PipelineJsonField fileName={pipelineFileName} onLoadFile={handleLoadPipelineFile} />
-              <SchemaBuilderField accent="violet" fields={simpleFields} onChange={setSimpleFields} />
+              <PipelineJsonField
+                key={pipelineFileName ? 'pipeline-cargado' : 'pipeline-vacio'}
+                fileName={pipelineFileName}
+                onLoadFile={handleLoadPipelineFile}
+              />
+              <ArtifactsFileField
+                key={artifacts ? 'detector-cargado' : 'detector-vacio'}
+                accent="violet"
+                fileName={artifacts?.name}
+                onChange={(event) => selectArtifacts(event.target.files[0] ?? null)}
+              />
+              <SchemaBuilderField accent="violet" fields={schemaFields} onChange={changeSchemaFields} />
             </GradientCard>
           </div>
         </div>

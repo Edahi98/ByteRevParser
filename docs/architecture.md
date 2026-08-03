@@ -38,9 +38,14 @@ service → binarios externos (resources/*) o librerías (bs4, pdf2docx, request
 ### `controllers/` — Controller
 
 - **`pipeline_controller.py`**: expone `POST /execute_pipeline`.
-  - Recibe `file` (UploadFile), `pipeline` y `schema` (JSON como string, extracción estructurada con `NuExtractService`) vía `multipart/form-data`.
+  - Recibe `file` (UploadFile), `pipeline` y `schema` (JSON como string, extracción estructurada con `NuExtractService`) y `artifacts` (UploadFile, el ZIP del detector de control de cambios) vía `multipart/form-data`. Los cuatro son obligatorios.
   - Valida extensión (`ALLOWED_EXTENSIONS`, importado de `xml_orchestrator`).
   - Usa `PreserviceFileManager` para materializar el archivo subido en disco, delega la orquestación a `OcrOrchestrator.run(...)` y arma la respuesta con `views.pipeline_view`.
+  - Su `APIRouter` se construye con `route_class=LargeMultipartRoute` (ver abajo), porque `pipeline` y `schema` viajan como campos de texto y superan el tope por defecto de Starlette.
+- **`large_multipart_route.py`**: `LargeMultipartRoute`, subclase de `APIRoute`.
+  - Starlette acumula en memoria cada campo de texto de un `multipart/form-data` y lo corta en 1MB (`Part exceeded maximum size of 1024KB.`); los archivos subidos no sufren ese tope porque se vuelcan a un fichero temporal conforme llegan.
+  - Antes de delegar en el handler original, pre-parsea el formulario con `request.form(max_part_size=MAX_PART_SIZE)` cuando el `Content-Type` es `multipart/form-data`. El `FormData` queda cacheado en el `Request`, así que el parseo posterior de FastAPI lo reutiliza sin volver a leer el stream.
+  - El tope se controla con `REDDRAGON_MAX_PART_MB` (default `64`).
 
 ### `preservices/` — preparación de insumos
 
@@ -51,15 +56,20 @@ service → binarios externos (resources/*) o librerías (bs4, pdf2docx, request
 - **`xml_orchestrator.py`**: `XmlOrchestrator.get_xml(input_path) -> str`.
   Convierte `doc/docx/xls/xlsx/pdf` a XML: si la extensión es `.pdf`, primero pasa por `PdfService.convert_to_docx`; luego siempre pasa por `XmlJavaService.convert` (binario `resources/xmljava-docker`).
 
-- **`ocr_orchestrator.py`**: `OcrOrchestrator.run(input_path, pipeline, schema) -> dict`.
+- **`ocr_orchestrator.py`**: `OcrOrchestrator.run(input_path, pipeline, schema, artifacts) -> dict`.
   Flujo completo:
   1. `XmlOrchestrator.get_xml(input_path)` → `xml_path`.
   2. `XmlService.extract_tables(xml_path)` → datos extraídos del XML (lista plana).
   3. `PipelineService.replace_data(pipeline, extracted_data)` → reemplaza cada llave `"data"` del pipeline (en cualquier nivel de anidamiento) con `{"dato": extracted_data}` (columna `"dato"` con la lista extraída).
-  4. `TsubasaService.execute(pipeline)` → envía el pipeline transformado al servidor Tsubasa y recibe una lista plana de valores.
-  5. `XmlService.prune_xml(xml_path, result_data)` → XML podado, `MarkdownService.to_markdown(pruned_path)` lo renderiza en Markdown, `RedactorService.redact(markdown)` lo convierte en prosa y `NuExtractService.extract(prose, schema)` rellena el esquema JSON contra ella — ese resultado es lo que se devuelve.
+  4. **1ª validación** — `TsubasaService.execute(pipeline)` → envía el pipeline transformado al servidor Tsubasa y recibe una lista plana de valores.
+  5. **2ª validación** — `ArtifactLoaderService.load(artifacts)` → encoder del detector. `ValidDataFilterService.filter(result_data, encoder)` devuelve las **descripciones de cambio** que reconoció (lo único que sabe juzgar), `ChangeScopeService.collect(xml_path, anclas)` las localiza en el XML y sube a la `Table` que las contiene para devolver todos los textos de ese ámbito, y `ValidDataFilterService.restrict(result_data, scope)` se queda solo con los candidatos que caen dentro. Un firmante sobrevive porque comparte tabla con una descripción reconocida, no por su forma ni su longitud. Si no ancla nada, el ámbito viene vacío y no se restringe.
+  6. **3ª validación** — el pipeline se reejecuta sobre lo que sobrevivió: `PipelineService.replace_data(pipeline, result_data)` sustituye en sitio la llave `"data"` por el lote ya filtrado y `TsubasaService.execute(pipeline)` corre por segunda vez. Se salta si el detector no dejó nada, para no reejecutar en vacío. Las tres validaciones van **antes** de podar: lo que se descarta no debe sobrevivir en el XML podado.
+  7. `XmlService.prune_xml(xml_path, result_data)` → XML podado, `MarkdownService.to_markdown(pruned_path)` lo renderiza en Markdown, `RedactorService.redact(markdown)` lo convierte en prosa y `NuExtractService.extract(prose, schema)` rellena el esquema JSON contra ella — ese resultado es lo que se devuelve.
 
 ### `services/` — lógica atómica
+
+- **`change_scope_service.py`**: `ChangeScopeService.collect(xml_path, anchors) -> set[str]`.
+  Propaga por la estructura del XML la decisión que tomó el detector. Busca los nodos hoja cuyo texto coincide con alguna de las `anchors` (las descripciones de cambio reconocidas), sube al `Table` que las envuelve —o al `Row` si no hay tabla— y devuelve todos los textos de ese ámbito como claves de `TextNormalizerService.fold`. El plegado es imprescindible: el XML guarda `No. de Revisión` y el pipeline devuelve `NO. DE REVISION`, así que comparar en crudo daría por distinto el mismo dato y borraría todos los campos con acentos. Devuelve un conjunto vacío si no hay anclas o ninguna cae en una tabla.
 
 | Servicio | Responsabilidad |
 |---|---|
@@ -134,6 +144,7 @@ Los binarios Linux (`xmljava-docker`, `tsubasa`) solo son ejecutables dentro del
 |---|---|---|
 | `REDDRAGON_HOST` | `main.py` (uvicorn) | `0.0.0.0` |
 | `REDDRAGON_PORT` | `main.py` (uvicorn) | `8000` |
+| `REDDRAGON_MAX_PART_MB` | `controllers/large_multipart_route.py` | `64` |
 | `TSUBASA_HOST` | `TsubasaService` | `127.0.0.1` |
 | `TSUBASA_PORT` | `TsubasaService` | `5000` |
 

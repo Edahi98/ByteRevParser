@@ -115,13 +115,14 @@ RedDragon/
 ├── models_ai/                        # 🧠 modelos de Hugging Face (no versionado, ver abajo)
 ├── scripts/start.sh                  # 🐧 arranque nativo en Linux (sin Docker)
 ├── docs/architecture.md               # 📚 arquitectura detallada
-├── frontend/                            # ⚛️ React + Vite + TailwindCSS
+├── frontend/                            # ⚛️ React + Vite + TailwindCSS + Redux Toolkit
 │   └── src/
 │       ├── components/{atoms,molecules,organisms,templates}/  # 🧩 Atomic Design
-│       ├── hooks/                                                # 🪝 lógica reutilizable
-│       ├── data/                                                  # 📋 listas/config estáticos
-│       └── pages/                                                  # 📄 páginas
-└── Dockerfile                                                        # 🐳 build multi-etapa
+│       ├── store/                                                # 🗃️ Redux (slices + persistencia en IndexedDB)
+│       ├── hooks/                                                 # 🪝 lógica reutilizable
+│       ├── data/                                                   # 📋 listas/config estáticos
+│       └── pages/                                                   # 📄 páginas
+└── Dockerfile                                                         # 🐳 build multi-etapa
 ```
 
 ---
@@ -205,6 +206,7 @@ npm run dev
 |---|---|---|
 | `REDDRAGON_HOST` | Host de uvicorn | `0.0.0.0` |
 | `REDDRAGON_PORT` | Puerto de la API | `8000` |
+| `REDDRAGON_MAX_PART_MB` | Tamaño máximo (MB) de cada campo de texto del `multipart/form-data` (`pipeline`, `schema`) | `64` |
 | `TSUBASA_HOST` | Host del binario `tsubasa` | `127.0.0.1` |
 | `TSUBASA_PORT` | Puerto del binario `tsubasa` | `5000` |
 
@@ -221,6 +223,7 @@ npm run dev
 | `file` | archivo | `doc`, `docx`, `xls`, `xlsx` o `pdf` |
 | `pipeline` | string (JSON) | grafo de nodos (`graph.nodes.*`) a ejecutar en Tsubasa. Cada nodo `"data": {}` se reemplaza con `{"dato": [...]}` (columna `"dato"`) — referencia esa columna en tus `select`/`filter`/etc. |
 | `schema` | string (JSON) | plantilla de campos a extraer (ej. `{"Nombre": "", "Monto": ""}`). El resultado de Tsubasa se poda contra el XML (`XmlService.prune_xml`), se renderiza en Markdown (`MarkdownService.to_markdown`), se redacta en prosa (`RedactorService.redact`) y `NuExtractService` rellena el esquema contra esa prosa |
+| `artifacts` | archivo | ZIP del detector de control de cambios, tal cual lo exporta `POST /train_detector_cambios`. Es la segunda de las tres validaciones que se aplican antes de podar el XML: el pipeline filtra, el detector reconoce las descripciones de cambio y `ChangeScopeService` propaga esa decisión a la tabla del XML que las contiene (así se conservan fecha, revisión y firmantes), y el pipeline se reejecuta sobre lo que sobrevive |
 
 **Respuesta** (`200`):
 

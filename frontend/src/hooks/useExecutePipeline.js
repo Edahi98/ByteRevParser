@@ -6,7 +6,7 @@ export function useExecutePipeline() {
   const [error, setError] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
 
-  const execute = async ({ file, pipeline, schema }) => {
+  const execute = async ({ file, pipeline, schema, artifacts }) => {
     setIsLoading(true)
     setError(null)
     setResult(null)
@@ -16,6 +16,7 @@ export function useExecutePipeline() {
       formData.append('file', file)
       formData.append('pipeline', pipeline)
       formData.append('schema', schema)
+      formData.append('artifacts', artifacts)
 
       const response = await fetch(EXECUTE_PIPELINE_URL, { method: 'POST', body: formData })
       const data = await response.json()
